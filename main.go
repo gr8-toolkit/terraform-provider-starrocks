@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	"github.com/svdimchenko/terraform-provider-starrocks/starrocks"
+	"github.com/gr8-toolkit/terraform-provider-starrocks/starrocks"
 )
 
 //go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate -provider-name terraform-provider-starrocks
@@ -19,7 +19,7 @@ func main() {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/svdimchenko/starrocks",
+		Address: "registry.terraform.io/gr8-toolkit/starrocks",
 		Debug:   debug,
 	}
 

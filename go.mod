@@ -1,4 +1,4 @@
-module github.com/svdimchenko/terraform-provider-starrocks
+module github.com/gr8-toolkit/terraform-provider-starrocks
 
 go 1.25.8
 

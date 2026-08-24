@@ -7,8 +7,8 @@ test:
 	go test ./...
 
 install: build
-	mkdir -p ~/.terraform.d/plugins/svdimchenko/starrocks/0.1.0/darwin_arm64
-	cp dist/terraform-provider-starrocks ~/.terraform.d/plugins/svdimchenko/starrocks/0.1.0/darwin_arm64/
+	mkdir -p ~/.terraform.d/plugins/gr8-toolkit/starrocks/0.1.0/darwin_arm64
+	cp dist/terraform-provider-starrocks ~/.terraform.d/plugins/gr8-toolkit/starrocks/0.1.0/darwin_arm64/
 
 tfplugindocs:
 	export GOBIN=$PWD/bin

@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     starrocks = {
-      source = "svdimchenko/starrocks"
+      source = "gr8-toolkit/starrocks"
     }
   }
 }

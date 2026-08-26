@@ -90,5 +90,6 @@ func (p *starrocksProvider) Resources(_ context.Context) []func() resource.Resou
 		NewTableResource,
 		NewIndexResource,
 		NewDatabaseResource,
+		NewGlobalVariableResource,
 	}
 }

@@ -19,10 +19,10 @@ func TestAcc_ResourceGroup_basic(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and immediately check state.
 			{
-				Config: accProviderBlock() + accResourceGroupBasicConfig("acc_basic", 10, "80.0%"),
+				Config: accProviderBlock() + accResourceGroupBasicConfig("acc_basic", 2, "80.0%"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("starrocks_resource_group.test", "name", "acc_basic"),
-					resource.TestCheckResourceAttr("starrocks_resource_group.test", "cpu_weight", "10"),
+					resource.TestCheckResourceAttr("starrocks_resource_group.test", "cpu_weight", "2"),
 					resource.TestCheckResourceAttr("starrocks_resource_group.test", "mem_limit", "80.0%"),
 				),
 			},
@@ -47,17 +47,17 @@ func TestAcc_ResourceGroup_update(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Initial state.
 			{
-				Config: accProviderBlock() + accResourceGroupBasicConfig("acc_update", 8, "60.0%"),
+				Config: accProviderBlock() + accResourceGroupBasicConfig("acc_update", 1, "60.0%"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("starrocks_resource_group.test", "cpu_weight", "8"),
+					resource.TestCheckResourceAttr("starrocks_resource_group.test", "cpu_weight", "1"),
 					resource.TestCheckResourceAttr("starrocks_resource_group.test", "mem_limit", "60.0%"),
 				),
 			},
 			// Update — triggers delete + recreate.
 			{
-				Config: accProviderBlock() + accResourceGroupBasicConfig("acc_update", 16, "70.0%"),
+				Config: accProviderBlock() + accResourceGroupBasicConfig("acc_update", 2, "70.0%"),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("starrocks_resource_group.test", "cpu_weight", "16"),
+					resource.TestCheckResourceAttr("starrocks_resource_group.test", "cpu_weight", "2"),
 					resource.TestCheckResourceAttr("starrocks_resource_group.test", "mem_limit", "70.0%"),
 				),
 			},
@@ -94,7 +94,7 @@ func TestAcc_ResourceGroup_disappears(t *testing.T) {
 		ProtoV6ProviderFactories: providerFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: accProviderBlock() + accResourceGroupBasicConfig("acc_disappears", 4, "50.0%"),
+				Config: accProviderBlock() + accResourceGroupBasicConfig("acc_disappears", 1, "50.0%"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("starrocks_resource_group.test", "name", "acc_disappears"),
 					// Delete the resource group out-of-band to simulate external drift.
@@ -115,6 +115,8 @@ func TestAcc_ResourceGroup_disappears(t *testing.T) {
 // accResourceGroupBasicConfig returns a minimal starrocks_resource_group HCL
 // block with name, cpu_weight, mem_limit, and a single user classifier.
 // StarRocks requires at least one classifier on every resource group.
+// cpu_weight is kept small (≤2) to stay within the BE's core count limit in
+// Docker-based test environments.
 func accResourceGroupBasicConfig(name string, cpuWeight int, memLimit string) string {
 	return fmt.Sprintf(`
 resource "starrocks_resource_group" "test" {
@@ -138,7 +140,7 @@ func accResourceGroupWithClassifierConfig(name string) string {
 	return fmt.Sprintf(`
 resource "starrocks_resource_group" "test" {
   name       = %q
-  cpu_weight = 4
+  cpu_weight = 1
   mem_limit  = "40.0%%"
 
   classifiers = [

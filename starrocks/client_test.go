@@ -22,7 +22,7 @@ func TestCreateResourceGroupQuery(t *testing.T) {
 				ConcurrencyLimit: types.Int64Value(10),
 			},
 			contains: []string{
-				"CREATE RESOURCE GROUP rg_test",
+				"CREATE RESOURCE GROUP `rg_test`",
 				"'cpu_weight' = '1'",
 				"'mem_limit' = '80%'",
 				"'concurrency_limit' = '10'",
@@ -40,7 +40,7 @@ func TestCreateResourceGroupQuery(t *testing.T) {
 				BigQueryCPUSecondLimit: types.Int64Value(200),
 			},
 			contains: []string{
-				"CREATE RESOURCE GROUP rg_full",
+				"CREATE RESOURCE GROUP `rg_full`",
 				"'cpu_weight' = '5'",
 				"'mem_limit' = '50%'",
 				"'concurrency_limit' = '20'",
@@ -76,7 +76,7 @@ func TestGetResourceGroup_12Columns(t *testing.T) {
 		"big_query_cpu_second_limit", "big_query_scan_rows_limit", "big_query_mem_limit",
 		"concurrency_limit", "spill_mem_limit_threshold", "warehouses", "classifiers"}
 
-	mock.ExpectQuery("SHOW RESOURCE GROUP test_rg").WillReturnRows(
+	mock.ExpectQuery("SHOW RESOURCE GROUP `test_rg`").WillReturnRows(
 		sqlmock.NewRows(cols).AddRow(
 			"test_rg", "1", "10", "0", "80.0%",
 			"100", "500000", "1073741824",
@@ -127,7 +127,7 @@ func TestGetResourceGroup_11Columns(t *testing.T) {
 		"big_query_cpu_second_limit", "big_query_scan_rows_limit", "big_query_mem_limit",
 		"concurrency_limit", "spill_mem_limit_threshold", "classifiers"}
 
-	mock.ExpectQuery("SHOW RESOURCE GROUP test_rg").WillReturnRows(
+	mock.ExpectQuery("SHOW RESOURCE GROUP `test_rg`").WillReturnRows(
 		sqlmock.NewRows(cols).AddRow(
 			"test_rg", "1", "10", "0", "80.0%",
 			"100", "500000", "1073741824",

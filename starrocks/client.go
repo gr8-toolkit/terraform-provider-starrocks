@@ -16,17 +16,17 @@ type Client struct {
 }
 
 type ResourceGroup struct {
-	Name                     types.String
-	CPUWeight                types.Int64
-	ExclusiveCPUCores        types.Int64
-	CPUCoreLimit             types.Int64
-	MaxCPUCores              types.Int64
-	MemLimit                 types.String
-	ConcurrencyLimit         types.Int64
-	BigQueryMemLimit         types.Int64
-	BigQueryScanRowsLimit    types.Int64
-	BigQueryCPUSecondLimit   types.Int64
-	Classifiers              types.List
+	Name                   types.String
+	CPUWeight              types.Int64
+	ExclusiveCPUCores      types.Int64
+	CPUCoreLimit           types.Int64
+	MaxCPUCores            types.Int64
+	MemLimit               types.String
+	ConcurrencyLimit       types.Int64
+	BigQueryMemLimit       types.Int64
+	BigQueryScanRowsLimit  types.Int64
+	BigQueryCPUSecondLimit types.Int64
+	Classifiers            types.List
 }
 
 type Classifier struct {
@@ -62,7 +62,7 @@ func NewClient(host, username, password string) (*Client, error) {
 }
 
 func (c *Client) CreateResourceGroup(rg ResourceGroupModel) error {
-	query := fmt.Sprintf("CREATE RESOURCE GROUP %s", rg.GetName().ValueString())
+	query := fmt.Sprintf("CREATE RESOURCE GROUP `%s`", rg.GetName().ValueString())
 
 	// Add TO clause with classifiers
 	if !rg.GetClassifiers().IsNull() && len(rg.GetClassifiers().Elements()) > 0 {
@@ -83,7 +83,7 @@ func (c *Client) CreateResourceGroup(rg ResourceGroupModel) error {
 				}
 				if queryType, exists := attrs["query_type"]; exists && !queryType.IsNull() {
 					if qtStr, ok := queryType.(types.String); ok {
-						conditions = append(conditions, fmt.Sprintf("query_type='%s'", qtStr.ValueString()))
+						conditions = append(conditions, fmt.Sprintf("query_type in ('%s')", qtStr.ValueString()))
 					}
 				}
 				if sourceIP, exists := attrs["source_ip"]; exists && !sourceIP.IsNull() {
@@ -145,7 +145,7 @@ func (c *Client) CreateResourceGroup(rg ResourceGroupModel) error {
 }
 
 func (c *Client) GetResourceGroup(name string) (*ResourceGroup, error) {
-	query := fmt.Sprintf("SHOW RESOURCE GROUP %s", name)
+	query := fmt.Sprintf("SHOW RESOURCE GROUP `%s`", name)
 	rows, err := c.db.Query(query)
 	if err != nil {
 		return nil, err
@@ -189,22 +189,22 @@ func (c *Client) GetResourceGroup(name string) (*ResourceGroup, error) {
 			}
 		}
 		if rg.ConcurrencyLimit.IsNull() {
-			if v, err := strconv.ParseInt(getCol("concurrency_limit"), 10, 64); err == nil {
+			if v, err := strconv.ParseInt(getCol("concurrency_limit"), 10, 64); err == nil && v > 0 {
 				rg.ConcurrencyLimit = types.Int64Value(v)
 			}
 		}
 		if rg.BigQueryMemLimit.IsNull() {
-			if v, err := strconv.ParseInt(getCol("big_query_mem_limit"), 10, 64); err == nil {
+			if v, err := strconv.ParseInt(getCol("big_query_mem_limit"), 10, 64); err == nil && v > 0 {
 				rg.BigQueryMemLimit = types.Int64Value(v)
 			}
 		}
 		if rg.BigQueryScanRowsLimit.IsNull() {
-			if v, err := strconv.ParseInt(getCol("big_query_scan_rows_limit"), 10, 64); err == nil {
+			if v, err := strconv.ParseInt(getCol("big_query_scan_rows_limit"), 10, 64); err == nil && v > 0 {
 				rg.BigQueryScanRowsLimit = types.Int64Value(v)
 			}
 		}
 		if rg.BigQueryCPUSecondLimit.IsNull() {
-			if v, err := strconv.ParseInt(getCol("big_query_cpu_second_limit"), 10, 64); err == nil {
+			if v, err := strconv.ParseInt(getCol("big_query_cpu_second_limit"), 10, 64); err == nil && v > 0 {
 				rg.BigQueryCPUSecondLimit = types.Int64Value(v)
 			}
 		}
@@ -244,7 +244,7 @@ func parseClassifier(s string) Classifier {
 }
 
 func (c *Client) DeleteResourceGroup(name string) error {
-	query := fmt.Sprintf("DROP RESOURCE GROUP %s", name)
+	query := fmt.Sprintf("DROP RESOURCE GROUP `%s`", name)
 	_, err := c.db.Exec(query)
 	return err
 }

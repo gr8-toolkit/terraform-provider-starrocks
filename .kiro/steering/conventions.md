@@ -25,7 +25,7 @@
 ## YAML / Config Files
 
 - YAML files (`.yml`, `.yaml`) are formatted by **Prettier** (v3.1.1). Do not hand-format them;
-  let Prettier handle it. Run `pre-commit run prettier --all-files` to auto-fix.
+  let Prettier handle it. Run `prek run prettier --all-files` to auto-fix.
 - GitHub Actions workflow files live under `.github/workflows/`.
 
 ## Markdown

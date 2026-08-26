@@ -87,5 +87,6 @@ func (p *starrocksProvider) Resources(_ context.Context) []func() resource.Resou
 	return []func() resource.Resource{
 		NewResourceGroupResource,
 		NewCatalogResource,
+		NewTableResource,
 	}
 }

@@ -11,8 +11,7 @@ Manages a StarRocks resource group.
 
 ## Important Notes
 
-- `mem_limit`: Must be specified with one decimal place (e.g., `"80.0%"` not `"80%"`)
-  to match StarRocks internal format and avoid drift.
+- `mem_limit`: Must be specified with one decimal place (e.g., `"80.0%"` not `"80%"`) to match StarRocks internal format and avoid drift.
 - Any change to the resource group will trigger a destroy and recreate operation.
 
 ## Example Usage
@@ -61,7 +60,6 @@ resource "starrocks_resource_group" "example" {
 - `mem_limit` (String)
 
 <a id="nestedatt--classifiers"></a>
-
 ### Nested Schema for `classifiers`
 
 Optional:

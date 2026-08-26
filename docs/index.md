@@ -7,6 +7,8 @@ description: |-
 
 # starrocks Provider
 
+
+
 ## Example Usage
 
 ```terraform

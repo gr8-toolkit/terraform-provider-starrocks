@@ -86,5 +86,6 @@ func (p *starrocksProvider) DataSources(_ context.Context) []func() datasource.D
 func (p *starrocksProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewResourceGroupResource,
+		NewCatalogResource,
 	}
 }

@@ -1,0 +1,38 @@
+---
+# Local StarRocks all-in-one instance for running acceptance tests.
+#
+# Usage:
+#   docker compose up -d          # start (waits for health before returning)
+#   docker compose down -v        # stop and remove volumes
+#
+# Override the image tag to test a specific version:
+#   STARROCKS_VERSION=3.4.10 docker compose up -d
+#
+# The MySQL port (9030) is exposed on 127.0.0.1 only so it does not
+# accidentally conflict with other services on the host.
+
+services:
+  starrocks:
+    image: starrocks/allin1-ubuntu:${STARROCKS_VERSION:-3.5.20}
+    container_name: starrocks
+    hostname: starrocks
+    ports:
+      - "127.0.0.1:9030:9030" # MySQL protocol (used by the provider)
+      - "127.0.0.1:8030:8030" # FE HTTP port
+      - "127.0.0.1:8040:8040" # BE HTTP port
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      # Wait until the FE is alive and accepting MySQL connections.
+      test:
+        - CMD-SHELL
+        - |
+          mysql -u root -h 127.0.0.1 -P 9030 \
+            -e "SHOW FRONTENDS\G" 2>/dev/null \
+            | grep -q "Alive: true"
+      interval: 10s
+      timeout: 5s
+      retries: 18 # up to ~3 minutes for the JVM + BE to start
+      start_period: 30s

@@ -3,6 +3,7 @@ package starrocks
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -26,34 +27,38 @@ type resourceGroupResource struct {
 }
 
 type resourceGroupResourceModel struct {
-	Name                     types.String `tfsdk:"name"`
-	CPUWeight                types.Int64  `tfsdk:"cpu_weight"`
-	ExclusiveCPUCores        types.Int64  `tfsdk:"exclusive_cpu_cores"`
-	CPUCoreLimit             types.Int64  `tfsdk:"cpu_core_limit"`
-	MaxCPUCores              types.Int64  `tfsdk:"max_cpu_cores"`
-	MemLimit                 types.String `tfsdk:"mem_limit"`
-	ConcurrencyLimit         types.Int64  `tfsdk:"concurrency_limit"`
-	BigQueryMemLimit         types.Int64  `tfsdk:"big_query_mem_limit"`
-	BigQueryScanRowsLimit    types.Int64  `tfsdk:"big_query_scan_rows_limit"`
-	BigQueryCPUSecondLimit   types.Int64  `tfsdk:"big_query_cpu_second_limit"`
-	Classifiers              types.List   `tfsdk:"classifiers"`
+	Name                   types.String `tfsdk:"name"`
+	CPUWeight              types.Int64  `tfsdk:"cpu_weight"`
+	ExclusiveCPUCores      types.Int64  `tfsdk:"exclusive_cpu_cores"`
+	CPUCoreLimit           types.Int64  `tfsdk:"cpu_core_limit"`
+	MaxCPUCores            types.Int64  `tfsdk:"max_cpu_cores"`
+	MemLimit               types.String `tfsdk:"mem_limit"`
+	ConcurrencyLimit       types.Int64  `tfsdk:"concurrency_limit"`
+	BigQueryMemLimit       types.Int64  `tfsdk:"big_query_mem_limit"`
+	BigQueryScanRowsLimit  types.Int64  `tfsdk:"big_query_scan_rows_limit"`
+	BigQueryCPUSecondLimit types.Int64  `tfsdk:"big_query_cpu_second_limit"`
+	Classifiers            types.List   `tfsdk:"classifiers"`
 }
 
-func (m *resourceGroupResourceModel) GetName() types.String { return m.Name }
-func (m *resourceGroupResourceModel) GetCPUWeight() types.Int64 { return m.CPUWeight }
+func (m *resourceGroupResourceModel) GetName() types.String             { return m.Name }
+func (m *resourceGroupResourceModel) GetCPUWeight() types.Int64         { return m.CPUWeight }
 func (m *resourceGroupResourceModel) GetExclusiveCPUCores() types.Int64 { return m.ExclusiveCPUCores }
-func (m *resourceGroupResourceModel) GetCPUCoreLimit() types.Int64 { return m.CPUCoreLimit }
-func (m *resourceGroupResourceModel) GetMaxCPUCores() types.Int64 { return m.MaxCPUCores }
-func (m *resourceGroupResourceModel) GetMemLimit() types.String { return m.MemLimit }
-func (m *resourceGroupResourceModel) GetConcurrencyLimit() types.Int64 { return m.ConcurrencyLimit }
-func (m *resourceGroupResourceModel) GetBigQueryMemLimit() types.Int64 { return m.BigQueryMemLimit }
-func (m *resourceGroupResourceModel) GetBigQueryScanRowsLimit() types.Int64 { return m.BigQueryScanRowsLimit }
-func (m *resourceGroupResourceModel) GetBigQueryCPUSecondLimit() types.Int64 { return m.BigQueryCPUSecondLimit }
+func (m *resourceGroupResourceModel) GetCPUCoreLimit() types.Int64      { return m.CPUCoreLimit }
+func (m *resourceGroupResourceModel) GetMaxCPUCores() types.Int64       { return m.MaxCPUCores }
+func (m *resourceGroupResourceModel) GetMemLimit() types.String         { return m.MemLimit }
+func (m *resourceGroupResourceModel) GetConcurrencyLimit() types.Int64  { return m.ConcurrencyLimit }
+func (m *resourceGroupResourceModel) GetBigQueryMemLimit() types.Int64  { return m.BigQueryMemLimit }
+func (m *resourceGroupResourceModel) GetBigQueryScanRowsLimit() types.Int64 {
+	return m.BigQueryScanRowsLimit
+}
+func (m *resourceGroupResourceModel) GetBigQueryCPUSecondLimit() types.Int64 {
+	return m.BigQueryCPUSecondLimit
+}
 func (m *resourceGroupResourceModel) GetClassifiers() types.List { return m.Classifiers }
 
 type classifierModel struct {
-	User   types.String  `tfsdk:"user"`
-	Role   types.String  `tfsdk:"role"`
+	User      types.String `tfsdk:"user"`
+	Role      types.String `tfsdk:"role"`
 	QueryType types.String `tfsdk:"query_type"`
 	SourceIP  types.String `tfsdk:"source_ip"`
 	DB        types.String `tfsdk:"db"`
@@ -66,16 +71,16 @@ func (r *resourceGroupResource) Metadata(_ context.Context, req resource.Metadat
 func (r *resourceGroupResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
-			"name":                          schema.StringAttribute{Required: true},
-			"cpu_weight":                    schema.Int64Attribute{Optional: true},
-			"exclusive_cpu_cores":           schema.Int64Attribute{Optional: true},
-			"cpu_core_limit":                schema.Int64Attribute{Optional: true},
-			"max_cpu_cores":                 schema.Int64Attribute{Optional: true},
-			"mem_limit":                     schema.StringAttribute{Optional: true},
-			"concurrency_limit":             schema.Int64Attribute{Optional: true},
-			"big_query_mem_limit":           schema.Int64Attribute{Optional: true},
-			"big_query_scan_rows_limit":     schema.Int64Attribute{Optional: true},
-			"big_query_cpu_second_limit":    schema.Int64Attribute{Optional: true},
+			"name":                       schema.StringAttribute{Required: true},
+			"cpu_weight":                 schema.Int64Attribute{Optional: true},
+			"exclusive_cpu_cores":        schema.Int64Attribute{Optional: true},
+			"cpu_core_limit":             schema.Int64Attribute{Optional: true},
+			"max_cpu_cores":              schema.Int64Attribute{Optional: true},
+			"mem_limit":                  schema.StringAttribute{Optional: true},
+			"concurrency_limit":          schema.Int64Attribute{Optional: true},
+			"big_query_mem_limit":        schema.Int64Attribute{Optional: true},
+			"big_query_scan_rows_limit":  schema.Int64Attribute{Optional: true},
+			"big_query_cpu_second_limit": schema.Int64Attribute{Optional: true},
 			"classifiers": schema.ListNestedAttribute{
 				Optional: true,
 				NestedObject: schema.NestedAttributeObject{
@@ -116,6 +121,13 @@ func (r *resourceGroupResource) Read(ctx context.Context, req resource.ReadReque
 
 	rg, err := r.client.GetResourceGroup(state.Name.ValueString())
 	if err != nil {
+		// StarRocks returns an error when the resource group does not exist.
+		// Treat this as a signal that the resource has been deleted outside of
+		// Terraform so the framework can plan a re-create.
+		if isNotFoundError(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError("Error reading resource group", err.Error())
 		return
 	}
@@ -180,7 +192,10 @@ func (r *resourceGroupResource) Delete(ctx context.Context, req resource.DeleteR
 	}
 
 	if err := r.client.DeleteResourceGroup(state.Name.ValueString()); err != nil {
-		resp.Diagnostics.AddError("Unable to Delete Resource Group", err.Error())
+		// Treat not-found as success — the resource is already gone.
+		if !isNotFoundError(err) {
+			resp.Diagnostics.AddError("Unable to Delete Resource Group", err.Error())
+		}
 	}
 }
 
@@ -210,7 +225,7 @@ func (r *resourceGroupResource) ImportState(ctx context.Context, req resource.Im
 		BigQueryMemLimit:       rg.BigQueryMemLimit,
 		BigQueryScanRowsLimit:  rg.BigQueryScanRowsLimit,
 		BigQueryCPUSecondLimit: rg.BigQueryCPUSecondLimit,
-		Classifiers:            types.ListNull(types.ObjectType{AttrTypes: map[string]attr.Type{
+		Classifiers: types.ListNull(types.ObjectType{AttrTypes: map[string]attr.Type{
 			"user":       types.StringType,
 			"role":       types.StringType,
 			"query_type": types.StringType,
@@ -234,4 +249,13 @@ func (r *resourceGroupResource) Configure(_ context.Context, req resource.Config
 	}
 
 	r.client = c
+}
+
+// isNotFoundError reports whether err indicates that a resource group does not
+// exist. StarRocks surfaces this as a MySQL error whose message contains
+// "does not exist" or "Unknown resource group".
+func isNotFoundError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "does not exist") ||
+		strings.Contains(msg, "unknown resource group")
 }

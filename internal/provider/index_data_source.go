@@ -82,6 +82,17 @@ func (d *indexDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 		state.Name.ValueString(),
 	)
 	if err != nil {
+		if client.IsIndexNotFoundError(err) || isTableNotFoundError(err) {
+			resp.Diagnostics.AddError(
+				"Index not found",
+				fmt.Sprintf("No index %q on table %q.%q.",
+					state.Name.ValueString(),
+					state.Database.ValueString(),
+					state.Table.ValueString(),
+				),
+			)
+			return
+		}
 		resp.Diagnostics.AddError("Error reading index", err.Error())
 		return
 	}

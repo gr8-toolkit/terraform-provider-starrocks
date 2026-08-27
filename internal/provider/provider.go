@@ -81,7 +81,15 @@ func (p *starrocksProvider) Configure(ctx context.Context, req provider.Configur
 }
 
 func (p *starrocksProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{}
+	return []func() datasource.DataSource{
+		NewPluginDataSource,
+		NewCatalogDataSource,
+		NewDatabaseDataSource,
+		NewGlobalVariableDataSource,
+		NewIndexDataSource,
+		NewResourceGroupDataSource,
+		NewTableDataSource,
+	}
 }
 
 func (p *starrocksProvider) Resources(_ context.Context) []func() resource.Resource {
@@ -92,5 +100,6 @@ func (p *starrocksProvider) Resources(_ context.Context) []func() resource.Resou
 		NewIndexResource,
 		NewDatabaseResource,
 		NewGlobalVariableResource,
+		NewPluginResource,
 	}
 }

@@ -1,0 +1,1 @@
+terraform import starrocks_plugin.audit AuditLoader

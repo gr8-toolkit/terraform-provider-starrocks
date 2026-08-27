@@ -73,7 +73,7 @@ STARROCKS_HOST=127.0.0.1 \
 STARROCKS_PORT=9030 \
 STARROCKS_USERNAME=root \
 STARROCKS_PASSWORD="" \
-  go test -v -run TestAcc_Table_addColumn -timeout 20m ./starrocks/
+  go test -v -run TestAcc_Table_addColumn -timeout 20m ./internal/provider/
 ```
 
 ## Code style

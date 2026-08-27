@@ -1,9 +1,10 @@
-package starrocks
+package provider
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/gr8-toolkit/terraform-provider-starrocks/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
@@ -69,7 +70,7 @@ func (p *starrocksProvider) Configure(ctx context.Context, req provider.Configur
 	password := config.Password.ValueString()
 
 	hostPort := fmt.Sprintf("%s:%s", host, port)
-	c, err := NewClient(hostPort, username, password)
+	c, err := client.NewClient(hostPort, username, password)
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to Create StarRocks Client", err.Error())
 		return

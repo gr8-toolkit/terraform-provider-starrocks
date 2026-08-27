@@ -1,4 +1,4 @@
-package starrocks
+package client
 
 import (
 	"fmt"
@@ -19,7 +19,7 @@ func TestCreateIndex_bitmap(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	// Expect the ALTER TABLE ADD INDEX statement.
 	mock.ExpectExec("ALTER TABLE `mydb`.`events` ADD INDEX `idx_name` \\(`name`\\) USING BITMAP").
@@ -37,7 +37,7 @@ func TestCreateIndex_bitmap(t *testing.T) {
 	defer func() { sleepFn = orig }()
 
 	idx := IndexDef{Name: "idx_name", Column: "name", Type: "BITMAP"}
-	if err := client.CreateIndex("mydb", "events", idx, 10); err != nil {
+	if err := c.CreateIndex("mydb", "events", idx, 10); err != nil {
 		t.Fatalf("CreateIndex: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -51,7 +51,7 @@ func TestCreateIndex_ngrambf(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("ALTER TABLE `mydb`.`t1` ADD INDEX `idx_desc`").
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -72,7 +72,7 @@ func TestCreateIndex_ngrambf(t *testing.T) {
 			"bloom_filter_fpp": "0.05",
 		},
 	}
-	if err := client.CreateIndex("mydb", "t1", idx, 10); err != nil {
+	if err := c.CreateIndex("mydb", "t1", idx, 10); err != nil {
 		t.Fatalf("CreateIndex NGRAMBF: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -86,7 +86,7 @@ func TestCreateIndex_withComment(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("ALTER TABLE").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SHOW ALTER TABLE COLUMN").WillReturnRows(
@@ -98,7 +98,7 @@ func TestCreateIndex_withComment(t *testing.T) {
 	defer func() { sleepFn = orig }()
 
 	idx := IndexDef{Name: "idx_id", Column: "id", Type: "BITMAP", Comment: "primary key index"}
-	if err := client.CreateIndex("mydb", "events", idx, 10); err != nil {
+	if err := c.CreateIndex("mydb", "events", idx, 10); err != nil {
 		t.Fatalf("CreateIndex with comment: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -116,7 +116,7 @@ func TestCreateIndex_jobCancelled(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("ALTER TABLE").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SHOW ALTER TABLE COLUMN").WillReturnRows(
@@ -128,7 +128,7 @@ func TestCreateIndex_jobCancelled(t *testing.T) {
 	defer func() { sleepFn = orig }()
 
 	idx := IndexDef{Name: "idx_id", Column: "id", Type: "BITMAP"}
-	err = client.CreateIndex("mydb", "events", idx, 10)
+	err = c.CreateIndex("mydb", "events", idx, 10)
 	if err == nil {
 		t.Fatal("expected error for CANCELLED job, got nil")
 	}
@@ -150,7 +150,7 @@ func TestGetIndex_found(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	cols := []string{
 		"Table", "Non_unique", "Key_name", "Seq_in_index",
@@ -165,7 +165,7 @@ func TestGetIndex_found(t *testing.T) {
 		),
 	)
 
-	got, err := client.GetIndex("mydb", "events", "idx_name")
+	got, err := c.GetIndex("mydb", "events", "idx_name")
 	if err != nil {
 		t.Fatalf("GetIndex: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestGetIndex_ngrambfTypeStripped(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	cols := []string{
 		"Table", "Non_unique", "Key_name", "Seq_in_index",
@@ -215,7 +215,7 @@ func TestGetIndex_ngrambfTypeStripped(t *testing.T) {
 		),
 	)
 
-	got, err := client.GetIndex("mydb", "t1", "idx_desc")
+	got, err := c.GetIndex("mydb", "t1", "idx_desc")
 	if err != nil {
 		t.Fatalf("GetIndex: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestGetIndex_notFound(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	cols := []string{"Table", "Non_unique", "Key_name", "Seq_in_index",
 		"Column_name", "Collation", "Cardinality", "Sub_part",
@@ -250,7 +250,7 @@ func TestGetIndex_notFound(t *testing.T) {
 		),
 	)
 
-	got, err := client.GetIndex("mydb", "events", "idx_name")
+	got, err := c.GetIndex("mydb", "events", "idx_name")
 	if err != nil {
 		t.Fatalf("GetIndex returned unexpected error: %v", err)
 	}
@@ -268,7 +268,7 @@ func TestGetIndex_emptyTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	cols := []string{"Table", "Non_unique", "Key_name", "Seq_in_index",
 		"Column_name", "Collation", "Cardinality", "Sub_part",
@@ -277,7 +277,7 @@ func TestGetIndex_emptyTable(t *testing.T) {
 		sqlmock.NewRows(cols), // zero rows
 	)
 
-	got, err := client.GetIndex("mydb", "events", "idx_name")
+	got, err := c.GetIndex("mydb", "events", "idx_name")
 	if err != nil {
 		t.Fatalf("GetIndex: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestDropIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("DROP INDEX `idx_name` ON `mydb`.`events`").
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -311,7 +311,7 @@ func TestDropIndex(t *testing.T) {
 	sleepFn = func(d time.Duration) {}
 	defer func() { sleepFn = orig }()
 
-	if err := client.DropIndex("mydb", "events", "idx_name", 10); err != nil {
+	if err := c.DropIndex("mydb", "events", "idx_name", 10); err != nil {
 		t.Fatalf("DropIndex: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -320,7 +320,7 @@ func TestDropIndex(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// isIndexNotFoundError
+// IsIndexNotFoundError
 // ---------------------------------------------------------------------------
 
 func TestIsIndexNotFoundError(t *testing.T) {
@@ -337,8 +337,8 @@ func TestIsIndexNotFoundError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.msg, func(t *testing.T) {
 			err := fmt.Errorf("%s", tt.msg)
-			if got := isIndexNotFoundError(err); got != tt.want {
-				t.Errorf("isIndexNotFoundError(%q) = %v, want %v", tt.msg, got, tt.want)
+			if got := IsIndexNotFoundError(err); got != tt.want {
+				t.Errorf("IsIndexNotFoundError(%q) = %v, want %v", tt.msg, got, tt.want)
 			}
 		})
 	}

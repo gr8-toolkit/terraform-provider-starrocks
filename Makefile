@@ -20,7 +20,7 @@ testacc: starrocks
 	STARROCKS_PORT=9030 \
 	STARROCKS_USERNAME=root \
 	STARROCKS_PASSWORD="" \
-	  go test -v -run TestAcc_ -timeout 20m ./starrocks/
+	  go test -v -run TestAcc_ -timeout 20m ./internal/provider/
 
 # Start a local StarRocks instance and wait until it is healthy.
 #   make starrocks                         # uses default version (3.5.20)

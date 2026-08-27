@@ -1,4 +1,4 @@
-package starrocks
+package provider
 
 import (
 	"fmt"
@@ -21,12 +21,12 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			panic("TestMain: failed to create StarRocks client: " + err.Error())
 		}
-		if _, err := client.db.Exec("CREATE DATABASE IF NOT EXISTS `" + accDB + "`"); err != nil {
+		if _, err := client.DB.Exec("CREATE DATABASE IF NOT EXISTS `" + accDB + "`"); err != nil {
 			panic("TestMain: failed to create test database: " + err.Error())
 		}
 		code := m.Run()
 		// Best-effort cleanup — ignore errors so a partial failure doesn't hide test results.
-		_, _ = client.db.Exec("DROP DATABASE IF EXISTS `" + accDB + "`")
+		_, _ = client.DB.Exec("DROP DATABASE IF EXISTS `" + accDB + "`")
 		os.Exit(code)
 	}
 	os.Exit(m.Run())

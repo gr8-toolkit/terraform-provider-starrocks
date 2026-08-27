@@ -1,4 +1,4 @@
-package starrocks
+package client
 
 import (
 	"strings"
@@ -159,8 +159,6 @@ func TestParseColumnLine(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestParseCreateTable(t *testing.T) {
-	// This is the output StarRocks returns from SHOW CREATE TABLE for a simple
-	// Duplicate Key table.
 	ddl := "CREATE TABLE `events` (\n" +
 		"  `id` bigint(20) NOT NULL COMMENT \"pk\",\n" +
 		"  `name` varchar(128) NULL DEFAULT \"\" COMMENT \"\",\n" +
@@ -192,7 +190,6 @@ func TestParseCreateTable(t *testing.T) {
 		t.Fatalf("len(Columns) = %d, want 3", len(td.Columns))
 	}
 
-	// Check first column
 	col := td.Columns[0]
 	if col.Name != "id" {
 		t.Errorf("Columns[0].Name = %q, want id", col.Name)
@@ -204,7 +201,6 @@ func TestParseCreateTable(t *testing.T) {
 		t.Errorf("Columns[0].Comment = %q, want pk", col.Comment)
 	}
 
-	// Check second column with default
 	col2 := td.Columns[1]
 	if col2.Name != "name" {
 		t.Errorf("Columns[1].Name = %q, want name", col2.Name)
@@ -243,36 +239,6 @@ func TestParseCreateTable_PrimaryKey(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// columnChanged
-// ---------------------------------------------------------------------------
-
-func TestColumnChanged(t *testing.T) {
-	base := ColumnDef{Name: "x", Type: "INT", Nullable: true}
-
-	tests := []struct {
-		name    string
-		old     ColumnDef
-		new     ColumnDef
-		changed bool
-	}{
-		{"identical", base, base, false},
-		{"type changed", base, ColumnDef{Name: "x", Type: "BIGINT", Nullable: true}, true},
-		{"nullable changed", base, ColumnDef{Name: "x", Type: "INT", Nullable: false}, true},
-		{"default added", base, ColumnDef{Name: "x", Type: "INT", Nullable: true, Default: "0"}, true},
-		{"comment added", base, ColumnDef{Name: "x", Type: "INT", Nullable: true, Comment: "note"}, true},
-		{"type case insensitive same", base, ColumnDef{Name: "x", Type: "int", Nullable: true}, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := columnChanged(tt.old, tt.new); got != tt.changed {
-				t.Errorf("columnChanged = %v, want %v", got, tt.changed)
-			}
-		})
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Client — CreateTable (SQL shape)
 // ---------------------------------------------------------------------------
 
@@ -282,7 +248,7 @@ func TestCreateTable_sqlShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("CREATE TABLE").WillReturnResult(sqlmock.NewResult(0, 0))
 
@@ -299,7 +265,7 @@ func TestCreateTable_sqlShape(t *testing.T) {
 		Properties: map[string]string{"replication_num": "1"},
 	}
 
-	if err := client.CreateTable("mydb", td); err != nil {
+	if err := c.CreateTable("mydb", td); err != nil {
 		t.Fatalf("CreateTable: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -317,13 +283,13 @@ func TestAlterTableAddColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("ALTER TABLE `mydb`.`events` ADD COLUMN `score` INT NOT NULL").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	col := ColumnDef{Name: "score", Type: "INT", Nullable: false}
-	if err := client.AlterTableAddColumn("mydb", "events", col); err != nil {
+	if err := c.AlterTableAddColumn("mydb", "events", col); err != nil {
 		t.Fatalf("AlterTableAddColumn: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -337,12 +303,12 @@ func TestAlterTableDropColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("ALTER TABLE `mydb`.`events` DROP COLUMN `score`").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	if err := client.AlterTableDropColumn("mydb", "events", "score"); err != nil {
+	if err := c.AlterTableDropColumn("mydb", "events", "score"); err != nil {
 		t.Fatalf("AlterTableDropColumn: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -356,14 +322,33 @@ func TestAlterTableModifyColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("ALTER TABLE `mydb`.`events` MODIFY COLUMN `score` BIGINT NOT NULL").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	col := ColumnDef{Name: "score", Type: "BIGINT", Nullable: false}
-	if err := client.AlterTableModifyColumn("mydb", "events", col); err != nil {
+	if err := c.AlterTableModifyColumn("mydb", "events", col); err != nil {
 		t.Fatalf("AlterTableModifyColumn: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestAlterTableComment(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	c := &Client{DB: db}
+
+	mock.ExpectExec("ALTER TABLE `mydb`.`events` COMMENT =").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	if err := c.AlterTableComment("mydb", "events", "updated comment"); err != nil {
+		t.Fatalf("AlterTableComment: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unfulfilled expectations: %v", err)
@@ -380,15 +365,13 @@ func TestGetTable_notFound(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
-	// When the table doesn't exist StarRocks returns an error, not an empty
-	// result set, but we also handle the nil-row case.
 	mock.ExpectQuery("SHOW CREATE TABLE").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}),
 	)
 
-	got, err := client.GetTable("mydb", "missing")
+	got, err := c.GetTable("mydb", "missing")
 	if err != nil {
 		t.Fatalf("GetTable returned unexpected error: %v", err)
 	}
@@ -406,7 +389,7 @@ func TestGetTable_found(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	ddl := "CREATE TABLE `events` (\n" +
 		"  `id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -420,7 +403,7 @@ func TestGetTable_found(t *testing.T) {
 		sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow("events", ddl),
 	)
 
-	got, err := client.GetTable("mydb", "events")
+	got, err := c.GetTable("mydb", "events")
 	if err != nil {
 		t.Fatalf("GetTable: %v", err)
 	}
@@ -448,12 +431,12 @@ func TestDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("DROP TABLE IF EXISTS `mydb`.`events`").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	if err := client.DropTable("mydb", "events"); err != nil {
+	if err := c.DropTable("mydb", "events"); err != nil {
 		t.Fatalf("DropTable: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

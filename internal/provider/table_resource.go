@@ -1,10 +1,11 @@
-package starrocks
+package provider
 
 import (
 	"context"
 	"fmt"
 	"strings"
 
+	"github.com/gr8-toolkit/terraform-provider-starrocks/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -27,7 +28,7 @@ func NewTableResource() resource.Resource {
 }
 
 type tableResource struct {
-	client *Client
+	client *client.Client
 }
 
 // tableResourceModel is the Terraform state model for starrocks_table.
@@ -53,7 +54,7 @@ type tableResourceModel struct {
 	Properties    types.Map    `tfsdk:"properties"`
 }
 
-// columnModel mirrors ColumnDef for the Terraform schema.
+// columnModel mirrors client.ColumnDef for the Terraform schema.
 type columnModel struct {
 	Name     types.String `tfsdk:"name"`
 	Type     types.String `tfsdk:"type"`
@@ -241,11 +242,11 @@ func (r *tableResource) Read(ctx context.Context, req resource.ReadRequest, resp
 }
 
 // Update handles the three column-change scenarios without recreating the table:
-//   - new column added        → ALTER TABLE ADD COLUMN
-//   - column removed          → ALTER TABLE DROP COLUMN
+//   - new column added          → ALTER TABLE ADD COLUMN
+//   - column removed            → ALTER TABLE DROP COLUMN
 //   - column type/attrs changed → ALTER TABLE MODIFY COLUMN
 //
-// It also handles a comment-only change via ALTER TABLE ... COMMENT.
+// It also handles a comment-only change via AlterTableComment.
 // All other attribute changes are covered by RequiresReplace plan modifiers.
 func (r *tableResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var state, plan tableResourceModel
@@ -267,11 +268,11 @@ func (r *tableResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
-	oldByName := make(map[string]ColumnDef, len(oldCols))
+	oldByName := make(map[string]client.ColumnDef, len(oldCols))
 	for _, c := range oldCols {
 		oldByName[c.Name] = c
 	}
-	newByName := make(map[string]ColumnDef, len(newCols))
+	newByName := make(map[string]client.ColumnDef, len(newCols))
 	for _, c := range newCols {
 		newByName[c.Name] = c
 	}
@@ -314,11 +315,7 @@ func (r *tableResource) Update(ctx context.Context, req resource.UpdateRequest, 
 
 	// Update table comment if it changed.
 	if !plan.Comment.Equal(state.Comment) && !plan.Comment.IsNull() && !plan.Comment.IsUnknown() {
-		_, err := r.client.db.Exec(fmt.Sprintf(
-			"ALTER TABLE `%s`.`%s` COMMENT = %q",
-			db, tbl, plan.Comment.ValueString(),
-		))
-		if err != nil {
+		if err := r.client.AlterTableComment(db, tbl, plan.Comment.ValueString()); err != nil {
 			resp.Diagnostics.AddError("Unable to update table comment", err.Error())
 			return
 		}
@@ -407,11 +404,11 @@ func (r *tableResource) Configure(_ context.Context, req resource.ConfigureReque
 	if req.ProviderData == nil {
 		return
 	}
-	c, ok := req.ProviderData.(*Client)
+	c, ok := req.ProviderData.(*client.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected resource configure type",
-			fmt.Sprintf("Expected *Client, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
 		)
 		return
 	}
@@ -423,7 +420,7 @@ func (r *tableResource) Configure(_ context.Context, req resource.ConfigureReque
 // ---------------------------------------------------------------------------
 
 // modelToTableDef converts the Terraform state model to the client TableDef.
-func modelToTableDef(ctx context.Context, m tableResourceModel) (*TableDef, diag.Diagnostics) {
+func modelToTableDef(ctx context.Context, m tableResourceModel) (*client.TableDef, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	cols, d := listToColumnDefs(ctx, m.Columns)
@@ -439,7 +436,7 @@ func modelToTableDef(ctx context.Context, m tableResourceModel) (*TableDef, diag
 		diags.Append(m.Properties.ElementsAs(ctx, &properties, false)...)
 	}
 
-	return &TableDef{
+	return &client.TableDef{
 		Database:   m.Database.ValueString(),
 		Name:       m.Name.ValueString(),
 		Engine:     m.Engine.ValueString(),
@@ -453,7 +450,7 @@ func modelToTableDef(ctx context.Context, m tableResourceModel) (*TableDef, diag
 }
 
 // tableDefToState writes fields from a parsed TableDef back into the model.
-func tableDefToState(ctx context.Context, t *TableDef, m *tableResourceModel) diag.Diagnostics {
+func tableDefToState(ctx context.Context, t *client.TableDef, m *tableResourceModel) diag.Diagnostics {
 	var diags diag.Diagnostics
 
 	if t.Engine != "" {
@@ -560,17 +557,17 @@ func tableDefToState(ctx context.Context, t *TableDef, m *tableResourceModel) di
 	return diags
 }
 
-// listToColumnDefs converts a types.List of column objects to []ColumnDef.
-func listToColumnDefs(ctx context.Context, list types.List) ([]ColumnDef, diag.Diagnostics) {
+// listToColumnDefs converts a types.List of column objects to []client.ColumnDef.
+func listToColumnDefs(ctx context.Context, list types.List) ([]client.ColumnDef, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	if list.IsNull() || list.IsUnknown() {
 		return nil, diags
 	}
 	var models []columnModel
 	diags.Append(list.ElementsAs(ctx, &models, false)...)
-	cols := make([]ColumnDef, len(models))
+	cols := make([]client.ColumnDef, len(models))
 	for i, m := range models {
-		cols[i] = ColumnDef{
+		cols[i] = client.ColumnDef{
 			Name:     m.Name.ValueString(),
 			Type:     m.Type.ValueString(),
 			Nullable: m.Nullable.ValueBool(),
@@ -583,7 +580,7 @@ func listToColumnDefs(ctx context.Context, list types.List) ([]ColumnDef, diag.D
 
 // columnChanged reports whether any field of a column differs between old and
 // new, signalling that MODIFY COLUMN is needed.
-func columnChanged(old, new ColumnDef) bool {
+func columnChanged(old, new client.ColumnDef) bool {
 	return !strings.EqualFold(old.Type, new.Type) ||
 		old.Nullable != new.Nullable ||
 		old.Default != new.Default ||

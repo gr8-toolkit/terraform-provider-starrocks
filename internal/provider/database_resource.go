@@ -1,10 +1,11 @@
-package starrocks
+package provider
 
 import (
 	"context"
 	"fmt"
 	"strings"
 
+	"github.com/gr8-toolkit/terraform-provider-starrocks/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -24,7 +25,7 @@ func NewDatabaseResource() resource.Resource {
 }
 
 type databaseResource struct {
-	client *Client
+	client *client.Client
 }
 
 // databaseResourceModel is the Terraform state model for starrocks_database.
@@ -164,7 +165,7 @@ func (r *databaseResource) Delete(ctx context.Context, req resource.DeleteReques
 	}
 
 	if err := r.client.DropDatabase(state.Name.ValueString()); err != nil {
-		if !isDatabaseNotFoundError(err) {
+		if !client.IsDatabaseNotFoundError(err) {
 			resp.Diagnostics.AddError("Unable to delete database", err.Error())
 		}
 	}
@@ -201,11 +202,11 @@ func (r *databaseResource) Configure(_ context.Context, req resource.ConfigureRe
 	if req.ProviderData == nil {
 		return
 	}
-	c, ok := req.ProviderData.(*Client)
+	c, ok := req.ProviderData.(*client.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected resource configure type",
-			fmt.Sprintf("Expected *Client, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
 		)
 		return
 	}
@@ -216,8 +217,8 @@ func (r *databaseResource) Configure(_ context.Context, req resource.ConfigureRe
 // Helpers
 // ---------------------------------------------------------------------------
 
-func modelToDatabaseDef(m databaseResourceModel) DatabaseDef {
-	return DatabaseDef{
+func modelToDatabaseDef(m databaseResourceModel) client.DatabaseDef {
+	return client.DatabaseDef{
 		Name:          m.Name.ValueString(),
 		DataQuota:     m.DataQuota.ValueString(),
 		ReplicaQuota:  m.ReplicaQuota.ValueInt64(),
@@ -237,13 +238,4 @@ func setComputedDefaults(m *databaseResourceModel) {
 	if m.StorageVolume.IsNull() || m.StorageVolume.IsUnknown() {
 		m.StorageVolume = types.StringValue("")
 	}
-}
-
-// isDatabaseNotFoundError reports whether err indicates that a database does
-// not exist.
-func isDatabaseNotFoundError(err error) bool {
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "unknown database") ||
-		strings.Contains(msg, "database") && strings.Contains(msg, "not exist") ||
-		strings.Contains(msg, "is not found")
 }

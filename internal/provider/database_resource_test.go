@@ -1,10 +1,11 @@
-package starrocks
+package provider
 
 import (
 	"fmt"
 	"regexp"
 	"testing"
 
+	"github.com/gr8-toolkit/terraform-provider-starrocks/internal/client"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -151,26 +152,26 @@ resource "starrocks_database" "test" {
 
 func testAccDropDatabaseOutOfBand(name string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		client, err := accClient()
+		c, err := accClient()
 		if err != nil {
 			return fmt.Errorf("creating client for out-of-band database drop: %w", err)
 		}
-		return client.DropDatabase(name)
+		return c.DropDatabase(name)
 	}
 }
 
 func testAccCreateTableInDatabase(db, table string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		client, err := accClient()
+		c, err := accClient()
 		if err != nil {
 			return fmt.Errorf("creating client: %w", err)
 		}
-		return client.CreateTable(db, &TableDef{
+		return c.CreateTable(db, &client.TableDef{
 			Name:       table,
 			Engine:     "OLAP",
 			KeyType:    "DUPLICATE KEY",
 			KeyColumns: []string{"id"},
-			Columns: []ColumnDef{
+			Columns: []client.ColumnDef{
 				{Name: "id", Type: "BIGINT", Nullable: false},
 			},
 			DistBy:     "DISTRIBUTED BY HASH(id) BUCKETS 1",
@@ -181,11 +182,11 @@ func testAccCreateTableInDatabase(db, table string) resource.TestCheckFunc {
 
 func testAccDropTableInDatabase(db, table string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		client, err := accClient()
+		c, err := accClient()
 		if err != nil {
 			return fmt.Errorf("creating client: %w", err)
 		}
-		return client.DropTable(db, table)
+		return c.DropTable(db, table)
 	}
 }
 
@@ -194,22 +195,22 @@ func testAccDropTableInDatabase(db, table string) resource.TestCheckFunc {
 // It is a no-op when the database does not exist.
 func testAccForceDropDatabase(t *testing.T, name string) {
 	t.Helper()
-	client, err := accClient()
+	c, err := accClient()
 	if err != nil {
 		t.Logf("testAccForceDropDatabase: could not create client: %v", err)
 		return
 	}
-	tables, err := client.ListDatabaseTables(name)
+	tables, err := c.ListDatabaseTables(name)
 	if err != nil {
 		t.Logf("testAccForceDropDatabase: could not list tables in %q: %v", name, err)
 		return
 	}
 	for _, tbl := range tables {
-		if err := client.DropTable(name, tbl); err != nil {
+		if err := c.DropTable(name, tbl); err != nil {
 			t.Logf("testAccForceDropDatabase: could not drop table %q.%q: %v", name, tbl, err)
 		}
 	}
-	if err := client.DropDatabase(name); err != nil {
+	if err := c.DropDatabase(name); err != nil {
 		t.Logf("testAccForceDropDatabase: could not drop database %q: %v", name, err)
 	}
 }

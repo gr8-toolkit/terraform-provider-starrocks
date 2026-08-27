@@ -3,12 +3,12 @@
 page_title: "starrocks_table Resource - terraform-provider-starrocks"
 subcategory: ""
 description: |-
-  Manages a StarRocks OLAP table. Column additions, removals, and type changes are handled in-place via ALTER TABLE. Changes to database, name, engine, key_type, key_columns, distributed_by, or properties require replacing (destroying and recreating) the table.
+  Manages a StarRocks OLAP table. Column additions, removals, and type changes are handled in-place via ALTER TABLE. Changes to database, name, engine, key_type, key_columns, partition_by, distributed_by, or properties require replacing (destroying and recreating) the table.
 ---
 
 # starrocks_table (Resource)
 
-Manages a StarRocks OLAP table. Column additions, removals, and type changes are handled in-place via `ALTER TABLE`. Changes to `database`, `name`, `engine`, `key_type`, `key_columns`, `distributed_by`, or `properties` require replacing (destroying and recreating) the table.
+Manages a StarRocks OLAP table. Column additions, removals, and type changes are handled in-place via `ALTER TABLE`. Changes to `database`, `name`, `engine`, `key_type`, `key_columns`, `partition_by`, `distributed_by`, or `properties` require replacing (destroying and recreating) the table.
 
 ## Example Usage
 
@@ -224,6 +224,7 @@ resource "starrocks_table" "orders" {
 - `engine` (String) Storage engine. Defaults to `OLAP`.
 - `key_columns` (List of String) Ordered list of key column names.
 - `key_type` (String) Key type: `DUPLICATE KEY`, `AGGREGATE KEY`, `UNIQUE KEY`, or `PRIMARY KEY`. Defaults to `DUPLICATE KEY`.
+- `partition_by` (String) Partition clause, e.g. `PARTITION BY date_trunc('day', dt)`. If omitted the table is unpartitioned. Triggers replacement on change.
 - `properties` (Map of String) Table PROPERTIES map, e.g. `{"replication_num" = "1"}`. Triggers replacement on change.
 
 <a id="nestedatt--columns"></a>

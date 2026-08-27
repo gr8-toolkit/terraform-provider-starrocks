@@ -18,15 +18,16 @@ type ColumnDef struct {
 
 // TableDef is the parsed representation of a StarRocks table used in state.
 type TableDef struct {
-	Database   string
-	Name       string
-	Engine     string
-	KeyType    string
-	KeyColumns []string
-	Columns    []ColumnDef
-	DistBy     string
-	Comment    string
-	Properties map[string]string
+	Database    string
+	Name        string
+	Engine      string
+	KeyType     string
+	KeyColumns  []string
+	Columns     []ColumnDef
+	PartitionBy string
+	DistBy      string
+	Comment     string
+	Properties  map[string]string
 }
 
 // CreateTable executes CREATE TABLE. The caller provides the full column list,
@@ -52,6 +53,9 @@ func (c *Client) CreateTable(db string, t *TableDef) error {
 	}
 	if t.Comment != "" {
 		q += fmt.Sprintf("\nCOMMENT %q", t.Comment)
+	}
+	if t.PartitionBy != "" {
+		q += "\n" + t.PartitionBy
 	}
 	if t.DistBy != "" {
 		q += "\n" + t.DistBy
@@ -182,6 +186,13 @@ func parseCreateTable(db, ddl string) (*TableDef, error) {
 	// DISTRIBUTED BY clause — capture everything up to PROPERTIES or end
 	if m := regexp.MustCompile(`(?i)(DISTRIBUTED BY[^\n]+(?:BUCKETS\s+\d+)?)`).FindStringSubmatch(ddl); len(m) > 1 {
 		t.DistBy = strings.TrimSpace(m[1])
+	}
+
+	// PARTITION BY clause — free-form expression, e.g.
+	// "PARTITION BY date_trunc('day', `timestamp`)"
+	// It appears after the ENGINE/key block and before DISTRIBUTED BY.
+	if m := regexp.MustCompile(`(?i)(PARTITION BY[^\n]+)`).FindStringSubmatch(ddl); len(m) > 1 {
+		t.PartitionBy = strings.TrimSpace(m[1])
 	}
 
 	// Key type and key columns

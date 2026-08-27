@@ -183,6 +183,51 @@ func TestAcc_Plugin_auditLoader(t *testing.T) {
 	})
 }
 
+// TestAcc_Plugin_importNoReplace verifies the import-then-apply behaviour
+// introduced by pluginSourceRequiresReplace and pluginPropertiesRequiresReplace.
+//
+// Scenario: a plugin is managed by Terraform, then imported fresh (simulating
+// a hand-installed plugin brought under Terraform management). After import the
+// state holds sentinel values for source ("") and properties ({}). The very
+// next apply with the real config must produce an empty diff — it must NOT
+// trigger a destroy+recreate of the already-running plugin.
+func TestAcc_Plugin_importNoReplace(t *testing.T) {
+	skipIfNotAcc(t)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { accPreCheck(t) },
+		ProtoV6ProviderFactories: providerFactories,
+		Steps: []resource.TestStep{
+			// Step 1 — install the plugin so it exists in StarRocks.
+			{
+				Config: accProviderBlock() + accPluginAuditLoaderConfig(),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("starrocks_plugin.audit", "name", "AuditLoader"),
+					resource.TestCheckResourceAttrSet("starrocks_plugin.audit", "status"),
+					resource.TestCheckResourceAttrSet("starrocks_plugin.audit", "version"),
+				),
+			},
+			// Step 2 — import by name; this sets source="" and properties={}
+			// in state, simulating `terraform import starrocks_plugin.audit AuditLoader`.
+			{
+				ResourceName:      "starrocks_plugin.audit",
+				ImportState:       true,
+				ImportStateId:     "AuditLoader",
+				ImportStateVerify: false,
+			},
+			// Step 3 — re-apply the original config. The plan must be empty:
+			// source and properties must NOT force replacement even though the
+			// imported state holds sentinel values different from the config.
+			// ExpectNonEmptyPlan defaults to false, so this step fails the test
+			// if Terraform proposes any changes (including a replace).
+			{
+				Config:             accProviderBlock() + accPluginAuditLoaderConfig(),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // accPluginAuditLoaderConfig returns the HCL for the AuditLoader plugin
 // using the official release URL with no properties block.
 func accPluginAuditLoaderConfig() string {

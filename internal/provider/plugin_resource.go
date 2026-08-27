@@ -22,6 +22,56 @@ var (
 	_ resource.ResourceWithImportState = &pluginResource{}
 )
 
+// ---------------------------------------------------------------------------
+// Plan modifier helpers for import-safe replacement behaviour.
+// ---------------------------------------------------------------------------
+
+// pluginSourceRequiresReplace triggers replacement when source changes, but
+// NOT on the first apply after import. Import sets source to "" because
+// SHOW PLUGINS does not return the original install path/URL. On the next
+// plan Terraform sees "" → "<configured URL>", which must not be treated as
+// a destructive change — the plugin is already installed.
+type pluginSourceRequiresReplace struct{}
+
+func (pluginSourceRequiresReplace) Description(_ context.Context) string {
+	return "Triggers replacement when source changes, unless the prior state came from an import (empty string sentinel)."
+}
+func (p pluginSourceRequiresReplace) MarkdownDescription(ctx context.Context) string {
+	return p.Description(ctx)
+}
+func (pluginSourceRequiresReplace) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// No prior state (new resource) or state is the import sentinel → no replace.
+	if req.StateValue.IsNull() || req.StateValue.IsUnknown() || req.StateValue.ValueString() == "" {
+		return
+	}
+	if !req.PlanValue.Equal(req.StateValue) {
+		resp.RequiresReplace = true
+	}
+}
+
+// pluginPropertiesRequiresReplace triggers replacement when properties change,
+// but NOT on the first apply after import. Import sets properties to {} because
+// SHOW PLUGINS does not return install-time properties. On the next plan
+// Terraform sees {} → <configured map>, which must not be treated as a
+// destructive change.
+type pluginPropertiesRequiresReplace struct{}
+
+func (pluginPropertiesRequiresReplace) Description(_ context.Context) string {
+	return "Triggers replacement when properties change, unless the prior state came from an import (empty map sentinel)."
+}
+func (p pluginPropertiesRequiresReplace) MarkdownDescription(ctx context.Context) string {
+	return p.Description(ctx)
+}
+func (pluginPropertiesRequiresReplace) PlanModifyMap(_ context.Context, req planmodifier.MapRequest, resp *planmodifier.MapResponse) {
+	// No prior state (new resource) or state is the import sentinel (empty map) → no replace.
+	if req.StateValue.IsNull() || req.StateValue.IsUnknown() || len(req.StateValue.Elements()) == 0 {
+		return
+	}
+	if !req.PlanValue.Equal(req.StateValue) {
+		resp.RequiresReplace = true
+	}
+}
+
 // NewPluginResource returns a new starrocks_plugin resource implementation.
 func NewPluginResource() resource.Resource {
 	return &pluginResource{}
@@ -77,7 +127,7 @@ func (r *pluginResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				MarkdownDescription: "The install source: an absolute path to a `.zip` file or plugin " +
 					"directory, or an `http`/`https` URL pointing to a `.zip` file. " +
 					"Changing this attribute destroys the old plugin and installs from the new source.",
-				PlanModifiers: replaceString,
+				PlanModifiers: []planmodifier.String{pluginSourceRequiresReplace{}},
 			},
 			"properties": schema.MapAttribute{
 				Optional:    true,
@@ -86,7 +136,7 @@ func (r *pluginResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				MarkdownDescription: "Optional key/value properties forwarded to the `PROPERTIES (...)` " +
 					"clause of `INSTALL PLUGIN FROM`. Common use: `{\"md5sum\" = \"<hash>\"}` " +
 					"to verify the zip file integrity. Changing properties triggers replacement.",
-				PlanModifiers: []planmodifier.Map{mapRequiresReplace{}},
+				PlanModifiers: []planmodifier.Map{pluginPropertiesRequiresReplace{}},
 			},
 			"type": schema.StringAttribute{
 				Computed:            true,

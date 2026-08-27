@@ -1,10 +1,11 @@
-package starrocks
+package provider
 
 import (
 	"context"
 	"fmt"
 	"strings"
 
+	"github.com/gr8-toolkit/terraform-provider-starrocks/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -27,7 +28,7 @@ func NewIndexResource() resource.Resource {
 }
 
 type indexResource struct {
-	client *Client
+	client *client.Client
 }
 
 // indexResourceModel is the Terraform state model for starrocks_index.
@@ -176,7 +177,7 @@ func (r *indexResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		state.Name.ValueString(),
 	)
 	if err != nil {
-		if isIndexNotFoundError(err) {
+		if client.IsIndexNotFoundError(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -217,7 +218,7 @@ func (r *indexResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 		state.Name.ValueString(),
 		timeout,
 	); err != nil {
-		if !isIndexNotFoundError(err) {
+		if !client.IsIndexNotFoundError(err) {
 			resp.Diagnostics.AddError("Unable to delete index", err.Error())
 		}
 	}
@@ -269,11 +270,11 @@ func (r *indexResource) Configure(_ context.Context, req resource.ConfigureReque
 	if req.ProviderData == nil {
 		return
 	}
-	c, ok := req.ProviderData.(*Client)
+	c, ok := req.ProviderData.(*client.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected resource configure type",
-			fmt.Sprintf("Expected *Client, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
 		)
 		return
 	}
@@ -285,13 +286,13 @@ func (r *indexResource) Configure(_ context.Context, req resource.ConfigureReque
 // ---------------------------------------------------------------------------
 
 // modelToIndexDef converts the Terraform state model to an IndexDef.
-func modelToIndexDef(ctx context.Context, m indexResourceModel) (IndexDef, diag.Diagnostics) {
+func modelToIndexDef(ctx context.Context, m indexResourceModel) (client.IndexDef, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	props := make(map[string]string)
 	if !m.Properties.IsNull() && !m.Properties.IsUnknown() {
 		diags.Append(m.Properties.ElementsAs(ctx, &props, false)...)
 	}
-	return IndexDef{
+	return client.IndexDef{
 		Name:       m.Name.ValueString(),
 		Column:     m.Column.ValueString(),
 		Type:       strings.ToUpper(m.Type.ValueString()),
@@ -303,7 +304,7 @@ func modelToIndexDef(ctx context.Context, m indexResourceModel) (IndexDef, diag.
 // applyIndexDefToModel writes the fields from a GetIndex result back into the
 // model. Properties and timeout are preserved from the existing model since
 // SHOW INDEXES does not return properties.
-func applyIndexDefToModel(idx *IndexDef, m *indexResourceModel) {
+func applyIndexDefToModel(idx *client.IndexDef, m *indexResourceModel) {
 	m.Name = types.StringValue(idx.Name)
 	m.Column = types.StringValue(idx.Column)
 	m.Type = types.StringValue(idx.Type)

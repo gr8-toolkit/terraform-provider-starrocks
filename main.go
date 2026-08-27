@@ -5,8 +5,8 @@ import (
 	"flag"
 	"log"
 
+	"github.com/gr8-toolkit/terraform-provider-starrocks/internal/provider"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	"github.com/gr8-toolkit/terraform-provider-starrocks/starrocks"
 )
 
 //go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate -provider-name terraform-provider-starrocks
@@ -23,7 +23,7 @@ func main() {
 		Debug:   debug,
 	}
 
-	err := providerserver.Serve(context.Background(), starrocks.New(version), opts)
+	err := providerserver.Serve(context.Background(), provider.New(version), opts)
 	if err != nil {
 		log.Fatal(err.Error())
 	}

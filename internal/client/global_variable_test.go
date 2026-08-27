@@ -1,4 +1,4 @@
-package starrocks
+package client
 
 import (
 	"testing"
@@ -16,12 +16,12 @@ func TestSetGlobalVariable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("SET GLOBAL query_timeout = '600'").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	if err := client.SetGlobalVariable("query_timeout", "600"); err != nil {
+	if err := c.SetGlobalVariable("query_timeout", "600"); err != nil {
 		t.Fatalf("SetGlobalVariable: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -35,13 +35,13 @@ func TestSetGlobalVariable_escapesQuotes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	// Single quotes in the value must be escaped as ''.
 	mock.ExpectExec(`SET GLOBAL time_zone = 'Asia/Shanghai'`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	if err := client.SetGlobalVariable("time_zone", "Asia/Shanghai"); err != nil {
+	if err := c.SetGlobalVariable("time_zone", "Asia/Shanghai"); err != nil {
 		t.Fatalf("SetGlobalVariable with special value: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -59,14 +59,14 @@ func TestGetGlobalVariable_found(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'query_timeout'").WillReturnRows(
 		sqlmock.NewRows([]string{"Variable_name", "Value"}).
 			AddRow("query_timeout", "600"),
 	)
 
-	val, exists, err := client.GetGlobalVariable("query_timeout")
+	val, exists, err := c.GetGlobalVariable("query_timeout")
 	if err != nil {
 		t.Fatalf("GetGlobalVariable: %v", err)
 	}
@@ -87,14 +87,14 @@ func TestGetGlobalVariable_notFound(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	// SHOW GLOBAL VARIABLES LIKE returns zero rows for unknown variables.
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'nonexistent_var'").WillReturnRows(
 		sqlmock.NewRows([]string{"Variable_name", "Value"}),
 	)
 
-	_, exists, err := client.GetGlobalVariable("nonexistent_var")
+	_, exists, err := c.GetGlobalVariable("nonexistent_var")
 	if err != nil {
 		t.Fatalf("GetGlobalVariable: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestGetGlobalVariable_likePartialMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	// Simulate a row whose name doesn't exactly match the requested name.
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'query_timeout'").WillReturnRows(
@@ -124,7 +124,7 @@ func TestGetGlobalVariable_likePartialMatch(t *testing.T) {
 			AddRow("query_timeout_ms", "300000"),
 	)
 
-	_, exists, err := client.GetGlobalVariable("query_timeout")
+	_, exists, err := c.GetGlobalVariable("query_timeout")
 	if err != nil {
 		t.Fatalf("GetGlobalVariable: %v", err)
 	}
@@ -146,12 +146,12 @@ func TestResetGlobalVariable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("SET GLOBAL query_timeout = DEFAULT").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	if err := client.ResetGlobalVariable("query_timeout"); err != nil {
+	if err := c.ResetGlobalVariable("query_timeout"); err != nil {
 		t.Fatalf("ResetGlobalVariable: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

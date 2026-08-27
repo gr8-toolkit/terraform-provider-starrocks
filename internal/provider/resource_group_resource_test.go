@@ -1,10 +1,11 @@
-package starrocks
+package provider
 
 import (
 	"fmt"
 	"os"
 	"testing"
 
+	"github.com/gr8-toolkit/terraform-provider-starrocks/internal/client"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -178,12 +179,12 @@ func testAccDeleteResourceGroupOutOfBand(name string) resource.TestCheckFunc {
 
 // accClient constructs a StarRocks client from the acceptance-test environment
 // variables. Used by check helpers that need to reach the database directly.
-func accClient() (*Client, error) {
+func accClient() (*client.Client, error) {
 	host := fmt.Sprintf("%s:%s",
 		mustEnv("STARROCKS_HOST"),
 		mustEnv("STARROCKS_PORT"),
 	)
-	return NewClient(host, mustEnv("STARROCKS_USERNAME"), mustEnv("STARROCKS_PASSWORD"))
+	return client.NewClient(host, mustEnv("STARROCKS_USERNAME"), mustEnv("STARROCKS_PASSWORD"))
 }
 
 // mustEnv returns the value of an environment variable. It panics when the

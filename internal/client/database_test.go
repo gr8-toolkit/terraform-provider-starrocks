@@ -1,4 +1,4 @@
-package starrocks
+package client
 
 import (
 	"fmt"
@@ -18,12 +18,12 @@ func TestCreateDatabase_simple(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("CREATE DATABASE IF NOT EXISTS `mydb`").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	if err := client.CreateDatabase(DatabaseDef{Name: "mydb"}); err != nil {
+	if err := c.CreateDatabase(DatabaseDef{Name: "mydb"}); err != nil {
 		t.Fatalf("CreateDatabase: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -37,13 +37,13 @@ func TestCreateDatabase_withStorageVolume(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec(`CREATE DATABASE IF NOT EXISTS ` + "`mydb`" + ` PROPERTIES`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	d := DatabaseDef{Name: "mydb", StorageVolume: "s3_vol"}
-	if err := client.CreateDatabase(d); err != nil {
+	if err := c.CreateDatabase(d); err != nil {
 		t.Fatalf("CreateDatabase with storage_volume: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -61,13 +61,13 @@ func TestGetDatabase_found(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectQuery("SHOW DATABASES LIKE 'mydb'").WillReturnRows(
 		sqlmock.NewRows([]string{"Database"}).AddRow("mydb"),
 	)
 
-	exists, err := client.GetDatabase("mydb")
+	exists, err := c.GetDatabase("mydb")
 	if err != nil {
 		t.Fatalf("GetDatabase: %v", err)
 	}
@@ -85,13 +85,13 @@ func TestGetDatabase_notFound(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectQuery("SHOW DATABASES LIKE 'missing'").WillReturnRows(
 		sqlmock.NewRows([]string{"Database"}),
 	)
 
-	exists, err := client.GetDatabase("missing")
+	exists, err := c.GetDatabase("missing")
 	if err != nil {
 		t.Fatalf("GetDatabase: %v", err)
 	}
@@ -113,13 +113,13 @@ func TestUpdateDatabase_dataQuota(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("ALTER DATABASE `mydb` SET DATA QUOTA 10G").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	d := DatabaseDef{Name: "mydb", DataQuota: "10G"}
-	if err := client.UpdateDatabase(d); err != nil {
+	if err := c.UpdateDatabase(d); err != nil {
 		t.Fatalf("UpdateDatabase data quota: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -133,13 +133,13 @@ func TestUpdateDatabase_replicaQuota(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("ALTER DATABASE `mydb` SET REPLICA QUOTA 1000").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	d := DatabaseDef{Name: "mydb", ReplicaQuota: 1000}
-	if err := client.UpdateDatabase(d); err != nil {
+	if err := c.UpdateDatabase(d); err != nil {
 		t.Fatalf("UpdateDatabase replica quota: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -153,7 +153,7 @@ func TestUpdateDatabase_allFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	// All three ALTER statements must fire in order.
 	mock.ExpectExec("ALTER DATABASE `mydb` SET DATA QUOTA 5G").
@@ -164,7 +164,7 @@ func TestUpdateDatabase_allFields(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	d := DatabaseDef{Name: "mydb", DataQuota: "5G", ReplicaQuota: 500, StorageVolume: "s3_vol"}
-	if err := client.UpdateDatabase(d); err != nil {
+	if err := c.UpdateDatabase(d); err != nil {
 		t.Fatalf("UpdateDatabase all fields: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -178,11 +178,11 @@ func TestUpdateDatabase_noOp(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	// Empty def — no ALTER statements should be issued.
 	d := DatabaseDef{Name: "mydb"}
-	if err := client.UpdateDatabase(d); err != nil {
+	if err := c.UpdateDatabase(d); err != nil {
 		t.Fatalf("UpdateDatabase no-op: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -200,7 +200,7 @@ func TestDropDatabase_empty(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	// SHOW TABLES returns zero rows — DB is empty, drop proceeds.
 	mock.ExpectQuery("SHOW TABLES FROM `mydb`").WillReturnRows(
@@ -209,7 +209,7 @@ func TestDropDatabase_empty(t *testing.T) {
 	mock.ExpectExec("DROP DATABASE IF EXISTS `mydb`").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	if err := client.DropDatabase("mydb"); err != nil {
+	if err := c.DropDatabase("mydb"); err != nil {
 		t.Fatalf("DropDatabase empty db: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -223,7 +223,7 @@ func TestDropDatabase_nonEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	// SHOW TABLES returns two tables — drop must be blocked.
 	mock.ExpectQuery("SHOW TABLES FROM `mydb`").WillReturnRows(
@@ -233,7 +233,7 @@ func TestDropDatabase_nonEmpty(t *testing.T) {
 	)
 	// DROP DATABASE must NOT be called.
 
-	err = client.DropDatabase("mydb")
+	err = c.DropDatabase("mydb")
 	if err == nil {
 		t.Fatal("expected error when dropping non-empty database, got nil")
 	}
@@ -251,13 +251,13 @@ func TestDropDatabase_oneTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectQuery("SHOW TABLES FROM `mydb`").WillReturnRows(
 		sqlmock.NewRows([]string{"Tables_in_mydb"}).AddRow("events"),
 	)
 
-	err = client.DropDatabase("mydb")
+	err = c.DropDatabase("mydb")
 	if err == nil {
 		t.Fatal("expected error for database with 1 table")
 	}
@@ -270,7 +270,7 @@ func TestDropDatabase_oneTable(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// isDatabaseNotFoundError
+// IsDatabaseNotFoundError
 // ---------------------------------------------------------------------------
 
 func TestIsDatabaseNotFoundError(t *testing.T) {
@@ -286,9 +286,9 @@ func TestIsDatabaseNotFoundError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.msg, func(t *testing.T) {
-			got := isDatabaseNotFoundError(fmt.Errorf("%s", tt.msg))
+			got := IsDatabaseNotFoundError(fmt.Errorf("%s", tt.msg))
 			if got != tt.want {
-				t.Errorf("isDatabaseNotFoundError(%q) = %v, want %v", tt.msg, got, tt.want)
+				t.Errorf("IsDatabaseNotFoundError(%q) = %v, want %v", tt.msg, got, tt.want)
 			}
 		})
 	}

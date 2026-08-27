@@ -80,7 +80,7 @@ jobs:
           STARROCKS_PASSWORD: ""
         uses: robherley/go-test-action@v0
         with:
-          args: -v -run TestAcc_ -timeout 20m ./starrocks/
+          args: -v -run TestAcc_ -timeout 20m ./internal/provider/
 
       - name: Stop StarRocks
         if: always()

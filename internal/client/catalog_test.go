@@ -1,4 +1,4 @@
-package starrocks
+package client
 
 import (
 	"fmt"
@@ -19,12 +19,12 @@ func TestCreateCatalog_hive(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec(`CREATE EXTERNAL CATALOG`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	if err := client.CreateCatalog("hive_catalog", "", map[string]string{
+	if err := c.CreateCatalog("hive_catalog", "", map[string]string{
 		"type":                "hive",
 		"hive.metastore.uris": "thrift://meta:9083",
 	}); err != nil {
@@ -41,12 +41,12 @@ func TestCreateCatalog_withComment(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec(`CREATE EXTERNAL CATALOG`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	if err := client.CreateCatalog("iceberg_cat", "My Iceberg catalog", map[string]string{
+	if err := c.CreateCatalog("iceberg_cat", "My Iceberg catalog", map[string]string{
 		"type":                 "iceberg",
 		"iceberg.catalog.type": "hive",
 	}); err != nil {
@@ -107,14 +107,14 @@ func TestGetCatalog_found(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	cols := []string{"Catalog", "Type", "Comment"}
 	mock.ExpectQuery("SHOW CATALOGS LIKE 'hive_catalog'").WillReturnRows(
 		sqlmock.NewRows(cols).AddRow("hive_catalog", "Hive", ""),
 	)
 
-	cat, err := client.GetCatalog("hive_catalog")
+	cat, err := c.GetCatalog("hive_catalog")
 	if err != nil {
 		t.Fatalf("GetCatalog: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestGetCatalog_internalCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	cols := []string{"Catalog", "Type", "Comment"}
 	mock.ExpectQuery("SHOW CATALOGS LIKE 'default_catalog'").WillReturnRows(
@@ -149,7 +149,7 @@ func TestGetCatalog_internalCatalog(t *testing.T) {
 		),
 	)
 
-	cat, err := client.GetCatalog("default_catalog")
+	cat, err := c.GetCatalog("default_catalog")
 	if err != nil {
 		t.Fatalf("GetCatalog: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestGetCatalog_notFound(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	cols := []string{"Catalog", "Type", "Comment"}
 	// SHOW CATALOGS LIKE returns zero rows when no catalog matches.
@@ -178,7 +178,7 @@ func TestGetCatalog_notFound(t *testing.T) {
 		sqlmock.NewRows(cols),
 	)
 
-	cat, err := client.GetCatalog("missing_cat")
+	cat, err := c.GetCatalog("missing_cat")
 	if err != nil {
 		t.Fatalf("GetCatalog returned unexpected error: %v", err)
 	}
@@ -200,12 +200,12 @@ func TestDeleteCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	client := &Client{db: db}
+	c := &Client{DB: db}
 
 	mock.ExpectExec("DROP CATALOG IF EXISTS `hive_catalog`").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	if err := client.DeleteCatalog("hive_catalog"); err != nil {
+	if err := c.DeleteCatalog("hive_catalog"); err != nil {
 		t.Fatalf("DeleteCatalog: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

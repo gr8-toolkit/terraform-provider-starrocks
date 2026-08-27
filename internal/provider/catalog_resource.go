@@ -1,10 +1,11 @@
-package starrocks
+package provider
 
 import (
 	"context"
 	"fmt"
 	"strings"
 
+	"github.com/gr8-toolkit/terraform-provider-starrocks/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -25,7 +26,7 @@ func NewCatalogResource() resource.Resource {
 }
 
 type catalogResource struct {
-	client *Client
+	client *client.Client
 }
 
 // catalogResourceModel is the Terraform state model for starrocks_catalog.
@@ -78,10 +79,10 @@ func (r *catalogResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				MarkdownDescription: "Optional description for external catalogs.",
 			},
 			"properties": schema.MapAttribute{
-				Optional:            true,
-				Computed:            true,
-				Sensitive:           true,
-				ElementType:         types.StringType,
+				Optional:    true,
+				Computed:    true,
+				Sensitive:   true,
+				ElementType: types.StringType,
 				MarkdownDescription: "Key/value properties passed to `PROPERTIES (...)` on external catalogs. " +
 					"Must include at least `\"type\"`. Marked sensitive because credentials are commonly stored here.",
 			},
@@ -247,11 +248,11 @@ func (r *catalogResource) Configure(_ context.Context, req resource.ConfigureReq
 	if req.ProviderData == nil {
 		return
 	}
-	c, ok := req.ProviderData.(*Client)
+	c, ok := req.ProviderData.(*client.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected resource configure type",
-			fmt.Sprintf("Expected *Client, got: %T", req.ProviderData),
+			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
 		)
 		return
 	}

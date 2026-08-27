@@ -146,9 +146,144 @@ func TestAcc_Plugin_disappears(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Config helpers
-// ---------------------------------------------------------------------------
+// TestAcc_Plugin_auditLoader installs the AuditLoader plugin from the
+// official StarRocks release URL (no STARROCKS_PLUGIN_SOURCE required).
+// It verifies that:
+//   - computed fields are populated after install (no unknown-value error)
+//   - properties defaults to an empty map when omitted from config
+//   - an import round-trip succeeds
+//
+// This test requires network access to releases.starrocks.io.
+func TestAcc_Plugin_auditLoader(t *testing.T) {
+	skipIfNotAcc(t)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { accPreCheck(t) },
+		ProtoV6ProviderFactories: providerFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: accProviderBlock() + accPluginAuditLoaderConfig(),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("starrocks_plugin.audit", "name", "AuditLoader"),
+					resource.TestCheckResourceAttr("starrocks_plugin.audit", "source", "https://releases.starrocks.io/resources/AuditLoader.zip"),
+					// computed fields must be known (not unknown) after apply
+					resource.TestCheckResourceAttrSet("starrocks_plugin.audit", "type"),
+					resource.TestCheckResourceAttrSet("starrocks_plugin.audit", "status"),
+					resource.TestCheckResourceAttrSet("starrocks_plugin.audit", "version"),
+					// properties omitted in config — must resolve to empty map, not unknown
+					resource.TestCheckResourceAttr("starrocks_plugin.audit", "properties.%", "0"),
+				),
+			},
+			{
+				ResourceName:      "starrocks_plugin.audit",
+				ImportState:       true,
+				ImportStateId:     "AuditLoader",
+				ImportStateVerify: false, // source/properties are not recoverable from SHOW PLUGINS
+			},
+		},
+	})
+}
+
+// TestAcc_Plugin_importNoReplace verifies the import-then-apply behaviour
+// introduced by pluginSourceRequiresReplace and pluginPropertiesRequiresReplace.
+//
+// Scenario: a plugin is managed by Terraform, then imported fresh (simulating
+// a hand-installed plugin brought under Terraform management). After import the
+// state holds sentinel values for source ("") and properties ({}). The very
+// next apply with the real config must produce an empty diff — it must NOT
+// trigger a destroy+recreate of the already-running plugin.
+func TestAcc_Plugin_importNoReplace(t *testing.T) {
+	skipIfNotAcc(t)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { accPreCheck(t) },
+		ProtoV6ProviderFactories: providerFactories,
+		Steps: []resource.TestStep{
+			// Step 1 — install the plugin so it exists in StarRocks.
+			{
+				Config: accProviderBlock() + accPluginAuditLoaderConfig(),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("starrocks_plugin.audit", "name", "AuditLoader"),
+					resource.TestCheckResourceAttrSet("starrocks_plugin.audit", "status"),
+					resource.TestCheckResourceAttrSet("starrocks_plugin.audit", "version"),
+				),
+			},
+			// Step 2 — import by name; this sets source="" and properties={}
+			// in state, simulating `terraform import starrocks_plugin.audit AuditLoader`.
+			{
+				ResourceName:      "starrocks_plugin.audit",
+				ImportState:       true,
+				ImportStateId:     "AuditLoader",
+				ImportStateVerify: false,
+			},
+			// Step 3 — re-apply the original config. The plan must be empty:
+			// source and properties must NOT force replacement even though the
+			// imported state holds sentinel values different from the config.
+			// ExpectNonEmptyPlan defaults to false, so this step fails the test
+			// if Terraform proposes any changes (including a replace).
+			{
+				Config:             accProviderBlock() + accPluginAuditLoaderConfig(),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestAcc_Plugin_propertiesChangeNoReplace verifies that changing the
+// properties map does not destroy and recreate the plugin, and does not
+// call Update. The pluginIgnoreChanges modifier freezes the plan to the
+// state value, so Terraform sees no diff at all — the plugin is untouched.
+func TestAcc_Plugin_propertiesChangeNoReplace(t *testing.T) {
+	skipIfNotAcc(t)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { accPreCheck(t) },
+		ProtoV6ProviderFactories: providerFactories,
+		Steps: []resource.TestStep{
+			// Step 1 — install with no properties.
+			{
+				Config: accProviderBlock() + accPluginAuditLoaderConfig(),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("starrocks_plugin.audit", "name", "AuditLoader"),
+					resource.TestCheckResourceAttr("starrocks_plugin.audit", "properties.%", "0"),
+					resource.TestCheckResourceAttrSet("starrocks_plugin.audit", "version"),
+				),
+			},
+			// Step 2 — change the properties block in config. Because
+			// pluginIgnoreChanges freezes the plan to the stored state value,
+			// Terraform must produce an empty diff (no apply, no replace).
+			{
+				Config:             accProviderBlock() + accPluginAuditLoaderWithPropertiesConfig(),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// accPluginAuditLoaderWithPropertiesConfig is a variant of accPluginAuditLoaderConfig
+// that includes a properties block to exercise the no-replace-on-properties-change path.
+func accPluginAuditLoaderWithPropertiesConfig() string {
+	return `
+resource "starrocks_plugin" "audit" {
+  name   = "AuditLoader"
+  source = "https://releases.starrocks.io/resources/AuditLoader.zip"
+
+  properties = {
+    "md5sum" = "placeholder"
+  }
+}
+`
+}
+
+// accPluginAuditLoaderConfig returns the HCL for the AuditLoader plugin
+// using the official release URL with no properties block.
+func accPluginAuditLoaderConfig() string {
+	return `
+resource "starrocks_plugin" "audit" {
+  name   = "AuditLoader"
+  source = "https://releases.starrocks.io/resources/AuditLoader.zip"
+}
+`
+}
 
 // accPluginConfig returns an HCL block for a starrocks_plugin resource.
 // source must be a reachable path or URL — set via STARROCKS_PLUGIN_SOURCE.

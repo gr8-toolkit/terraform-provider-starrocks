@@ -22,6 +22,63 @@ var (
 	_ resource.ResourceWithImportState = &pluginResource{}
 )
 
+// ---------------------------------------------------------------------------
+// Plan modifier helpers for import-safe replacement behaviour.
+// ---------------------------------------------------------------------------
+
+// pluginSourceRequiresReplace triggers replacement when source changes, but
+// NOT on the first apply after import. Import sets source to "" because
+// SHOW PLUGINS does not return the original install path/URL. On the next
+// plan Terraform sees "" → "<configured URL>", which must not be treated as
+// a destructive change — the plugin is already installed.
+type pluginSourceRequiresReplace struct{}
+
+func (pluginSourceRequiresReplace) Description(_ context.Context) string {
+	return "Triggers replacement when source changes, unless the prior state came from an import (empty string sentinel)."
+}
+func (p pluginSourceRequiresReplace) MarkdownDescription(ctx context.Context) string {
+	return p.Description(ctx)
+}
+func (pluginSourceRequiresReplace) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// No prior state (new resource) or state is the import sentinel → no replace.
+	if req.StateValue.IsNull() || req.StateValue.IsUnknown() || req.StateValue.ValueString() == "" {
+		return
+	}
+	if !req.PlanValue.Equal(req.StateValue) {
+		resp.RequiresReplace = true
+	}
+}
+
+// pluginPropertiesRequiresReplace is intentionally absent: changing properties
+// does NOT trigger plugin replacement. Properties are install-time hints
+// (e.g. md5sum) that cannot be retrieved from SHOW PLUGINS, so Terraform
+// simply stores whatever the user configures. Only name or source changes
+// require replacing the plugin.
+
+// pluginIgnoreChanges is a MapPlanModifier that suppresses any diff on the
+// attribute by overwriting the plan value with the current state value.
+// Applied to `properties`: once the plugin is installed the value is locked
+// to whatever was used at creation time — StarRocks does not return it via
+// SHOW PLUGINS so there is nothing to reconcile on subsequent plans.
+// On a new resource (state is null) the plan value is left untouched so the
+// config value is used for the initial install.
+type pluginIgnoreChanges struct{}
+
+func (pluginIgnoreChanges) Description(_ context.Context) string {
+	return "Ignores config changes after initial creation by keeping the state value in the plan."
+}
+func (p pluginIgnoreChanges) MarkdownDescription(ctx context.Context) string {
+	return p.Description(ctx)
+}
+func (pluginIgnoreChanges) PlanModifyMap(_ context.Context, req planmodifier.MapRequest, resp *planmodifier.MapResponse) {
+	// New resource — no state yet, let the config value through for the install.
+	if req.StateValue.IsNull() || req.StateValue.IsUnknown() {
+		return
+	}
+	// Existing resource — freeze the plan to the stored state so no diff is produced.
+	resp.PlanValue = req.StateValue
+}
+
 // NewPluginResource returns a new starrocks_plugin resource implementation.
 func NewPluginResource() resource.Resource {
 	return &pluginResource{}
@@ -37,10 +94,12 @@ type pluginResource struct {
 //   - `name` is the plugin identity. Plugins cannot be renamed; changing the
 //     name triggers replacement (uninstall old, install new).
 //   - `source` is the install path or URL passed to INSTALL PLUGIN FROM.
-//     Changing it also triggers replacement because the only way to change the
+//     Changing it triggers replacement because the only way to change the
 //     source is to uninstall and reinstall.
 //   - `properties` is an optional map forwarded to the PROPERTIES (...) clause
-//     of INSTALL PLUGIN FROM. Used for e.g. md5sum verification.
+//     of INSTALL PLUGIN FROM (e.g. md5sum verification). Changes after the
+//     initial install are silently ignored via pluginIgnoreChanges — SHOW
+//     PLUGINS doesn't return it so there is nothing to reconcile.
 //   - `type`, `status`, `description`, `version` are Computed — populated from
 //     SHOW PLUGINS after install and refreshed on every Read.
 type pluginResourceModel struct {
@@ -77,7 +136,7 @@ func (r *pluginResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				MarkdownDescription: "The install source: an absolute path to a `.zip` file or plugin " +
 					"directory, or an `http`/`https` URL pointing to a `.zip` file. " +
 					"Changing this attribute destroys the old plugin and installs from the new source.",
-				PlanModifiers: replaceString,
+				PlanModifiers: []planmodifier.String{pluginSourceRequiresReplace{}},
 			},
 			"properties": schema.MapAttribute{
 				Optional:    true,
@@ -85,24 +144,30 @@ func (r *pluginResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				ElementType: types.StringType,
 				MarkdownDescription: "Optional key/value properties forwarded to the `PROPERTIES (...)` " +
 					"clause of `INSTALL PLUGIN FROM`. Common use: `{\"md5sum\" = \"<hash>\"}` " +
-					"to verify the zip file integrity. Changing properties triggers replacement.",
-				PlanModifiers: []planmodifier.Map{mapRequiresReplace{}},
+					"to verify the zip file integrity. Changes to this attribute after the initial " +
+					"install are ignored — `SHOW PLUGINS` does not return install-time properties " +
+					"so the value stored at creation time is kept in state.",
+				PlanModifiers: []planmodifier.Map{pluginIgnoreChanges{}},
 			},
 			"type": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "The plugin type as reported by StarRocks (e.g. `AUDIT`).",
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"description": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Plugin description as reported by StarRocks.",
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"version": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Plugin version as reported by StarRocks.",
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"status": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Plugin status as reported by StarRocks (e.g. `INSTALLED`).",
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 		},
 	}
@@ -170,14 +235,17 @@ func (r *pluginResource) Read(ctx context.Context, req resource.ReadRequest, res
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Update is never reached because every attribute either has RequiresReplace or
-// is Computed. This implementation satisfies the resource.Resource interface and
-// emits a loud error if it is ever called unexpectedly.
+// Update handles in-place changes to attributes that don't require replacement.
+// Currently the only mutable attribute is `properties` — it is an install-time
+// Update is never reached: name and source have RequiresReplace, and properties
+// uses pluginIgnoreChanges which freezes the plan to the state value so no diff
+// is ever produced. This implementation satisfies the resource.Resource interface
+// and surfaces a clear error if it is ever called unexpectedly.
 func (r *pluginResource) Update(_ context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
 	resp.Diagnostics.AddError(
 		"Update not supported",
-		"All starrocks_plugin attributes require replacement. "+
-			"This is a provider bug — Update should never be called.",
+		"starrocks_plugin attributes either require replacement (name, source) or ignore "+
+			"changes (properties). This is a provider bug — Update should never be called.",
 	)
 }
 
@@ -257,12 +325,19 @@ func (r *pluginResource) Configure(_ context.Context, req resource.ConfigureRequ
 
 // applyPluginToModel writes SHOW PLUGINS fields back into the state model.
 // source and properties are intentionally left unchanged — they are not
-// returned by SHOW PLUGINS.
+// returned by SHOW PLUGINS and must be preserved from the prior state/plan.
+// Callers must ensure Properties is already set to a known value before
+// calling this function, or set it explicitly afterwards.
 func applyPluginToModel(p *client.Plugin, m *pluginResourceModel) {
 	m.Type = types.StringValue(p.Type)
 	m.Description = types.StringValue(p.Description)
 	m.Version = types.StringValue(p.Version)
 	m.Status = types.StringValue(p.Status)
+	// Resolve Properties to an empty map when it is still null/unknown so
+	// Terraform never sees an unknown value after apply.
+	if m.Properties.IsNull() || m.Properties.IsUnknown() {
+		m.Properties = types.MapValueMust(types.StringType, map[string]attr.Value{})
+	}
 }
 
 // buildInstallPluginSQL is the pure-Go SQL builder exposed for unit tests.

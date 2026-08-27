@@ -287,3 +287,110 @@ func testAccDropTableOutOfBand(db, name string) resource.TestCheckFunc {
 		return client.DropTable(db, name)
 	}
 }
+
+// TestAcc_Table_auditLog creates the StarRocks audit log table — a Duplicate Key
+// table with 29 columns, expression-based partitioning, and an ARRAY column type.
+// It verifies the table is created correctly and that an import round-trip works.
+func TestAcc_Table_auditLog(t *testing.T) {
+	skipIfNotAcc(t)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { accPreCheck(t) },
+		ProtoV6ProviderFactories: providerFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: accProviderBlock() + accAuditLogTableConfig(),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("starrocks_table.audit", "database", accDB),
+					resource.TestCheckResourceAttr("starrocks_table.audit", "name", "acc_audit_tbl"),
+					resource.TestCheckResourceAttr("starrocks_table.audit", "comment", "Audit log table"),
+					resource.TestCheckResourceAttr("starrocks_table.audit", "key_type", "DUPLICATE KEY"),
+					resource.TestCheckResourceAttr("starrocks_table.audit", "columns.#", "29"),
+					// spot-check a few representative columns
+					resource.TestCheckResourceAttr("starrocks_table.audit", "columns.0.name", "queryId"),
+					resource.TestCheckResourceAttr("starrocks_table.audit", "columns.0.type", "VARCHAR(64)"),
+					resource.TestCheckResourceAttr("starrocks_table.audit", "columns.1.name", "timestamp"),
+					resource.TestCheckResourceAttr("starrocks_table.audit", "columns.1.nullable", "false"),
+					resource.TestCheckResourceAttr("starrocks_table.audit", "columns.28.name", "warehouse"),
+					// ARRAY column
+					resource.TestCheckResourceAttr("starrocks_table.audit", "columns.27.name", "QueriedRelations"),
+					resource.TestCheckResourceAttr("starrocks_table.audit", "columns.27.type", "ARRAY<VARCHAR(65533)>"),
+					// partition_by is set and non-empty
+					resource.TestCheckResourceAttrSet("starrocks_table.audit", "partition_by"),
+					// computed fields populated
+					resource.TestCheckResourceAttrSet("starrocks_table.audit", "engine"),
+					resource.TestCheckResourceAttrSet("starrocks_table.audit", "distributed_by"),
+					resource.TestCheckResourceAttr("starrocks_table.audit", "properties.replication_num", "1"),
+					resource.TestCheckResourceAttr("starrocks_table.audit", "properties.partition_live_number", "30"),
+				),
+			},
+			// Import by "database.table" and verify the resource can be
+			// reconstructed from SHOW CREATE TABLE output.
+			{
+				ResourceName:      "starrocks_table.audit",
+				ImportState:       true,
+				ImportStateId:     accDB + ".acc_audit_tbl",
+				ImportStateVerify: false, // StarRocks may normalise identifiers in the returned DDL
+			},
+		},
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Config helper
+// ---------------------------------------------------------------------------
+
+// accAuditLogTableConfig returns HCL for the StarRocks audit log table.
+// The table name is fixed to "acc_audit_tbl" to keep the test self-contained;
+// the database is the shared accDB constant.
+func accAuditLogTableConfig() string {
+	return fmt.Sprintf(`
+resource "starrocks_table" "audit" {
+  database = %q
+  name     = "acc_audit_tbl"
+  comment  = "Audit log table"
+
+  key_type    = "DUPLICATE KEY"
+  key_columns = ["queryId", "timestamp", "queryType"]
+
+  columns = [
+    { name = "queryId",          type = "VARCHAR(64)",          nullable = true,  comment = "Unique ID of the query" },
+    { name = "timestamp",        type = "DATETIME",             nullable = false, comment = "Query start time" },
+    { name = "queryType",        type = "VARCHAR(12)",          nullable = true,  comment = "Query type (query, slow_query, connection)" },
+    { name = "clientIp",         type = "VARCHAR(32)",          nullable = true,  comment = "Client IP" },
+    { name = "user",             type = "VARCHAR(64)",          nullable = true,  comment = "Query username" },
+    { name = "authorizedUser",   type = "VARCHAR(64)",          nullable = true,  comment = "Unique identifier of the user, i.e., user_identity" },
+    { name = "resourceGroup",    type = "VARCHAR(64)",          nullable = true,  comment = "Resource group name" },
+    { name = "catalog",          type = "VARCHAR(32)",          nullable = true,  comment = "Catalog name" },
+    { name = "db",               type = "VARCHAR(96)",          nullable = true,  comment = "Database where the query runs" },
+    { name = "state",            type = "VARCHAR(8)",           nullable = true,  comment = "Query state (EOF, ERR, OK)" },
+    { name = "errorCode",        type = "VARCHAR(512)",         nullable = true,  comment = "Error code" },
+    { name = "queryTime",        type = "BIGINT",               nullable = true,  comment = "Query execution time (milliseconds)" },
+    { name = "scanBytes",        type = "BIGINT",               nullable = true,  comment = "Number of bytes scanned by the query" },
+    { name = "scanRows",         type = "BIGINT",               nullable = true,  comment = "Number of rows scanned by the query" },
+    { name = "returnRows",       type = "BIGINT",               nullable = true,  comment = "Number of rows returned by the query" },
+    { name = "cpuCostNs",        type = "BIGINT",               nullable = true,  comment = "CPU time consumed by the query (nanoseconds)" },
+    { name = "memCostBytes",     type = "BIGINT",               nullable = true,  comment = "Memory consumed by the query (bytes)" },
+    { name = "stmtId",           type = "INT",                  nullable = true,  comment = "Incremental ID of the SQL statement" },
+    { name = "isQuery",          type = "TINYINT",              nullable = true,  comment = "Whether the SQL is a query (1 or 0)" },
+    { name = "feIp",             type = "VARCHAR(128)",         nullable = true,  comment = "FE IP that executed the statement" },
+    { name = "stmt",             type = "VARCHAR(1048576)",     nullable = true,  comment = "Original SQL statement" },
+    { name = "digest",           type = "VARCHAR(32)",          nullable = true,  comment = "Fingerprint of slow SQL" },
+    { name = "planCpuCosts",     type = "DOUBLE",               nullable = true,  comment = "CPU usage during query planning (nanoseconds)" },
+    { name = "planMemCosts",     type = "DOUBLE",               nullable = true,  comment = "Memory usage during query planning (bytes)" },
+    { name = "pendingTimeMs",    type = "BIGINT",               nullable = true,  comment = "Time the query waited in the queue (milliseconds)" },
+    { name = "candidateMVs",     type = "VARCHAR(65533)",       nullable = true,  comment = "List of candidate materialized views" },
+    { name = "hitMvs",           type = "VARCHAR(65533)",       nullable = true,  comment = "List of matched materialized views" },
+    { name = "QueriedRelations", type = "ARRAY<VARCHAR(65533)>", nullable = true,  comment = "List of directly referenced tables and views" },
+    { name = "warehouse",        type = "VARCHAR(32)",          nullable = true,  comment = "Warehouse name" },
+  ]
+
+  partition_by   = "PARTITION BY date_trunc('day', timestamp)"
+  distributed_by = "DISTRIBUTED BY HASH(queryId) BUCKETS 4"
+
+  properties = {
+    "replication_num"       = "1"
+    "partition_live_number" = "30"
+  }
+}
+`, accDB)
+}

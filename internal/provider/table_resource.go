@@ -38,8 +38,8 @@ type tableResource struct {
 //   - `columns` is an ordered list — order matters both for DDL and for StarRocks
 //     key-column semantics. It is the only mutable field: Update computes the
 //     diff and issues the minimal set of ALTER TABLE statements.
-//   - `engine`, `key_type`, `key_columns`, `distributed_by`, `properties` are
-//     creation-time only and trigger replacement on change.
+//   - `engine`, `key_type`, `key_columns`, `partition_by`, `distributed_by`,
+//     `properties` are creation-time only and trigger replacement on change.
 //   - `comment` is Optional+Computed and can be updated without recreation via
 //     ALTER TABLE ... COMMENT.
 type tableResourceModel struct {
@@ -49,6 +49,7 @@ type tableResourceModel struct {
 	KeyType       types.String `tfsdk:"key_type"`
 	KeyColumns    types.List   `tfsdk:"key_columns"`
 	Columns       types.List   `tfsdk:"columns"`
+	PartitionBy   types.String `tfsdk:"partition_by"`
 	DistributedBy types.String `tfsdk:"distributed_by"`
 	Comment       types.String `tfsdk:"comment"`
 	Properties    types.Map    `tfsdk:"properties"`
@@ -82,8 +83,8 @@ func (r *tableResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a StarRocks OLAP table. " +
 			"Column additions, removals, and type changes are handled in-place via `ALTER TABLE`. " +
-			"Changes to `database`, `name`, `engine`, `key_type`, `key_columns`, `distributed_by`, or `properties` " +
-			"require replacing (destroying and recreating) the table.",
+			"Changes to `database`, `name`, `engine`, `key_type`, `key_columns`, `partition_by`, " +
+			"`distributed_by`, or `properties` require replacing (destroying and recreating) the table.",
 		Attributes: map[string]schema.Attribute{
 			"database": schema.StringAttribute{
 				Required:            true,
@@ -146,6 +147,13 @@ func (r *tableResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						},
 					},
 				},
+			},
+			"partition_by": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				MarkdownDescription: "Partition clause, e.g. `PARTITION BY date_trunc('day', dt)`. " +
+					"If omitted the table is unpartitioned. Triggers replacement on change.",
+				PlanModifiers: replaceString,
 			},
 			"distributed_by": schema.StringAttribute{
 				Optional: true,
@@ -395,6 +403,7 @@ func (r *tableResource) ImportState(ctx context.Context, req resource.ImportStat
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("key_type"), state.KeyType)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("key_columns"), state.KeyColumns)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("columns"), state.Columns)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("partition_by"), state.PartitionBy)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("distributed_by"), state.DistributedBy)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("comment"), state.Comment)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("properties"), state.Properties)...)
@@ -437,15 +446,16 @@ func modelToTableDef(ctx context.Context, m tableResourceModel) (*client.TableDe
 	}
 
 	return &client.TableDef{
-		Database:   m.Database.ValueString(),
-		Name:       m.Name.ValueString(),
-		Engine:     m.Engine.ValueString(),
-		KeyType:    m.KeyType.ValueString(),
-		KeyColumns: keyColumns,
-		Columns:    cols,
-		DistBy:     m.DistributedBy.ValueString(),
-		Comment:    m.Comment.ValueString(),
-		Properties: properties,
+		Database:    m.Database.ValueString(),
+		Name:        m.Name.ValueString(),
+		Engine:      m.Engine.ValueString(),
+		KeyType:     m.KeyType.ValueString(),
+		KeyColumns:  keyColumns,
+		Columns:     cols,
+		PartitionBy: m.PartitionBy.ValueString(),
+		DistBy:      m.DistributedBy.ValueString(),
+		Comment:     m.Comment.ValueString(),
+		Properties:  properties,
 	}, diags
 }
 
@@ -510,6 +520,17 @@ func tableDefToState(ctx context.Context, t *client.TableDef, m *tableResourceMo
 		}
 	} else if m.DistributedBy.IsNull() || m.DistributedBy.IsUnknown() {
 		m.DistributedBy = types.StringValue("")
+	}
+
+	// PartitionBy — same prefer-state strategy as DistributedBy: StarRocks may
+	// backtick-quote column names in the returned expression, so we keep the
+	// user-supplied value after the initial import read.
+	if t.PartitionBy != "" {
+		if m.PartitionBy.IsNull() || m.PartitionBy.IsUnknown() || m.PartitionBy.ValueString() == "" {
+			m.PartitionBy = types.StringValue(t.PartitionBy)
+		}
+	} else if m.PartitionBy.IsNull() || m.PartitionBy.IsUnknown() {
+		m.PartitionBy = types.StringValue("")
 	}
 
 	if t.Comment != "" {

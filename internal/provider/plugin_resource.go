@@ -257,12 +257,19 @@ func (r *pluginResource) Configure(_ context.Context, req resource.ConfigureRequ
 
 // applyPluginToModel writes SHOW PLUGINS fields back into the state model.
 // source and properties are intentionally left unchanged — they are not
-// returned by SHOW PLUGINS.
+// returned by SHOW PLUGINS and must be preserved from the prior state/plan.
+// Callers must ensure Properties is already set to a known value before
+// calling this function, or set it explicitly afterwards.
 func applyPluginToModel(p *client.Plugin, m *pluginResourceModel) {
 	m.Type = types.StringValue(p.Type)
 	m.Description = types.StringValue(p.Description)
 	m.Version = types.StringValue(p.Version)
 	m.Status = types.StringValue(p.Status)
+	// Resolve Properties to an empty map when it is still null/unknown so
+	// Terraform never sees an unknown value after apply.
+	if m.Properties.IsNull() || m.Properties.IsUnknown() {
+		m.Properties = types.MapValueMust(types.StringType, map[string]attr.Value{})
+	}
 }
 
 // buildInstallPluginSQL is the pure-Go SQL builder exposed for unit tests.

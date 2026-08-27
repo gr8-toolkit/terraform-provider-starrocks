@@ -146,9 +146,53 @@ func TestAcc_Plugin_disappears(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Config helpers
-// ---------------------------------------------------------------------------
+// TestAcc_Plugin_auditLoader installs the AuditLoader plugin from the
+// official StarRocks release URL (no STARROCKS_PLUGIN_SOURCE required).
+// It verifies that:
+//   - computed fields are populated after install (no unknown-value error)
+//   - properties defaults to an empty map when omitted from config
+//   - an import round-trip succeeds
+//
+// This test requires network access to releases.starrocks.io.
+func TestAcc_Plugin_auditLoader(t *testing.T) {
+	skipIfNotAcc(t)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { accPreCheck(t) },
+		ProtoV6ProviderFactories: providerFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: accProviderBlock() + accPluginAuditLoaderConfig(),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("starrocks_plugin.audit", "name", "AuditLoader"),
+					resource.TestCheckResourceAttr("starrocks_plugin.audit", "source", "https://releases.starrocks.io/resources/AuditLoader.zip"),
+					// computed fields must be known (not unknown) after apply
+					resource.TestCheckResourceAttrSet("starrocks_plugin.audit", "type"),
+					resource.TestCheckResourceAttrSet("starrocks_plugin.audit", "status"),
+					resource.TestCheckResourceAttrSet("starrocks_plugin.audit", "version"),
+					// properties omitted in config — must resolve to empty map, not unknown
+					resource.TestCheckResourceAttr("starrocks_plugin.audit", "properties.%", "0"),
+				),
+			},
+			{
+				ResourceName:      "starrocks_plugin.audit",
+				ImportState:       true,
+				ImportStateId:     "AuditLoader",
+				ImportStateVerify: false, // source/properties are not recoverable from SHOW PLUGINS
+			},
+		},
+	})
+}
+
+// accPluginAuditLoaderConfig returns the HCL for the AuditLoader plugin
+// using the official release URL with no properties block.
+func accPluginAuditLoaderConfig() string {
+	return `
+resource "starrocks_plugin" "audit" {
+  name   = "AuditLoader"
+  source = "https://releases.starrocks.io/resources/AuditLoader.zip"
+}
+`
+}
 
 // accPluginConfig returns an HCL block for a starrocks_plugin resource.
 // source must be a reachable path or URL — set via STARROCKS_PLUGIN_SOURCE.

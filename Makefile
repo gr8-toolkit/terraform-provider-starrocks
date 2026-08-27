@@ -1,4 +1,4 @@
-.PHONY: build test testacc starrocks starrocks-stop install docs tfplugindocs
+.PHONY: build test testacc testaccfast starrocks starrocks-stop install docs tfplugindocs
 
 build:
 	go build -o ./dist/terraform-provider-starrocks
@@ -21,6 +21,18 @@ testacc: starrocks
 	STARROCKS_USERNAME=root \
 	STARROCKS_PASSWORD="" \
 	  go test -v -run TestAcc_ -timeout 20m ./internal/provider/
+
+# Run acceptance tests excluding the slow index tests (async schema-change jobs).
+#
+#   make testaccfast
+#   make testaccfast STARROCKS_VERSION=4.1.1
+testaccfast: starrocks
+	TF_ACC=1 \
+	STARROCKS_HOST=127.0.0.1 \
+	STARROCKS_PORT=9030 \
+	STARROCKS_USERNAME=root \
+	STARROCKS_PASSWORD="" \
+	  go test -v -run "TestAcc_[^I]|TestAcc_I[^n]|TestAcc_In[^d]" -timeout 20m ./internal/provider/
 
 # Start a local StarRocks instance and wait until it is healthy.
 #   make starrocks                         # uses default version (3.5.20)

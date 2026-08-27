@@ -228,6 +228,52 @@ func TestAcc_Plugin_importNoReplace(t *testing.T) {
 	})
 }
 
+// TestAcc_Plugin_propertiesChangeNoReplace verifies that changing the
+// properties map does not destroy and recreate the plugin, and does not
+// call Update. The pluginIgnoreChanges modifier freezes the plan to the
+// state value, so Terraform sees no diff at all — the plugin is untouched.
+func TestAcc_Plugin_propertiesChangeNoReplace(t *testing.T) {
+	skipIfNotAcc(t)
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { accPreCheck(t) },
+		ProtoV6ProviderFactories: providerFactories,
+		Steps: []resource.TestStep{
+			// Step 1 — install with no properties.
+			{
+				Config: accProviderBlock() + accPluginAuditLoaderConfig(),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("starrocks_plugin.audit", "name", "AuditLoader"),
+					resource.TestCheckResourceAttr("starrocks_plugin.audit", "properties.%", "0"),
+					resource.TestCheckResourceAttrSet("starrocks_plugin.audit", "version"),
+				),
+			},
+			// Step 2 — change the properties block in config. Because
+			// pluginIgnoreChanges freezes the plan to the stored state value,
+			// Terraform must produce an empty diff (no apply, no replace).
+			{
+				Config:             accProviderBlock() + accPluginAuditLoaderWithPropertiesConfig(),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// accPluginAuditLoaderWithPropertiesConfig is a variant of accPluginAuditLoaderConfig
+// that includes a properties block to exercise the no-replace-on-properties-change path.
+func accPluginAuditLoaderWithPropertiesConfig() string {
+	return `
+resource "starrocks_plugin" "audit" {
+  name   = "AuditLoader"
+  source = "https://releases.starrocks.io/resources/AuditLoader.zip"
+
+  properties = {
+    "md5sum" = "placeholder"
+  }
+}
+`
+}
+
 // accPluginAuditLoaderConfig returns the HCL for the AuditLoader plugin
 // using the official release URL with no properties block.
 func accPluginAuditLoaderConfig() string {
